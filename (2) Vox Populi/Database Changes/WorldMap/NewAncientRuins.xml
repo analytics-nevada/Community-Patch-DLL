@@ -5,7 +5,7 @@
 			<Type>GOODY_PRODUCTION</Type>
 			<Description>TXT_KEY_GOODY_PRODUCTION</Description>
 			<ChooseDescription>TXT_KEY_GOODY_CHOOSE_PRODUCTION</ChooseDescription>
-			<Production>30</Production>
+			<Production>50</Production>
 		</Row>
 		<Row>
 			<Type>GOODY_GOLDEN_AGE</Type>
@@ -24,6 +24,12 @@
 			<Description>TXT_KEY_GOODY_SCIENCE</Description>
 			<ChooseDescription>TXT_KEY_GOODY_CHOOSE_SCIENCE</ChooseDescription>
 			<Science>35</Science>
+		</Row>
+		<Row>
+			<Type>GOODY_LOST_PROTOTYPE</Type>
+			<Description>TXT_KEY_GOODY_LOST_PROTOTYPE</Description>
+			<ChooseDescription>TXT_KEY_GOODY_CHOOSE_LOST_PROTOTYPE</ChooseDescription>
+			<Promotion>PROMOTION_LOST_PROTOTYPE</Promotion>
 		</Row>
 	</GoodyHuts>
 </GameData>

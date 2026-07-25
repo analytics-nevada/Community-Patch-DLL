@@ -231,7 +231,7 @@ SET Text = 'Transcendent Thoughts'
 WHERE Tag = 'TXT_KEY_BELIEF_INITIATION_RITES_SHORT';
 
 UPDATE Language_en_US
-SET Text = 'When you enter a new Era, Holy City gains 15 of every Yield for each City following your [ICON_RELIGION] Religion (max 25 Cities), scaling with Era.[NEWLINE]Unlocks [COLOR_POSITIVE_TEXT]Sacred Garden National Wonder[ENDCOLOR] (+3 [ICON_PEACE] Faith, +5 [ICON_CULTURE] Culture; gain 20 of every Yield when a [ICON_SPY] Spy is Identified in the Empire, scaling with Era; +5 [ICON_FOOD] Food from [ICON_RELIGION] Holy Sites; unlocks [COLOR_POSITIVE_TEXT]Reformation Belief[ENDCOLOR]).'
+SET Text = 'When you enter a new Era, Holy City gains 15 of every Yield for each City following your [ICON_RELIGION] Religion (max 25 Cities), scaling with Era.[NEWLINE]Unlocks [COLOR_POSITIVE_TEXT]Heavenly Grotto National Wonder[ENDCOLOR] (+3 [ICON_PEACE] Faith, +5 [ICON_CULTURE] Culture; gain 20 of every Yield when a [ICON_SPY] Spy is Identified or Killed in the Empire, scaling with Era; +5 [ICON_FOOD] Food from [ICON_RELIGION] Holy Sites; unlocks [COLOR_POSITIVE_TEXT]Reformation Belief[ENDCOLOR]).'
 WHERE Tag = 'TXT_KEY_BELIEF_INITIATION_RITES';
 
 UPDATE Language_en_US
@@ -378,7 +378,7 @@ SET Text = 'Inquisition'
 WHERE Tag = 'TXT_KEY_BELIEF_RELIGIOUS_TEXTS_SHORT';
 
 UPDATE Language_en_US
-SET Text = '[ICON_INQUISITOR] Inquisitors cost 33% less [ICON_PEACE] Faith, and generate 25 [ICON_GOLD] Gold per converted [ICON_CITIZEN] Citizen when Removing Heresy. Your [ICON_SPY] Spies exert +52 Religious Pressure on the Cities they occupy (Standard Speed), and +2 [ICON_HAPPINESS_1] Happiness if stationed in a foreign City.'
+SET Text = '[ICON_INQUISITOR] Inquisitors cost 33% less [ICON_PEACE] Faith. If stationed in a City, your [ICON_SPY] Spies provide +2 [ICON_HAPPINESS_1] Happiness and reduce existing pressure from other religions by 26 per turn (Standard Speed). Spies stationed in a foreign City also gain +8 Network Points per turn.'
 WHERE Tag = 'TXT_KEY_BELIEF_RELIGIOUS_TEXTS';
 
 UPDATE Language_en_US

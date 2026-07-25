@@ -46,6 +46,7 @@ CvBuildingEntry::CvBuildingEntry(void):
 	m_iResourceType(NO_RESOURCE),
 	m_iGrantsRandomResourceTerritory(0),
 	m_bPuppetPurchaseOverride(false),
+	m_bRequiresPuppet(false),
 	m_bAllowsPuppetPurchase(false),
 	m_bNoStarvationNonSpecialist(false),
 	m_iMinimumFood(0),
@@ -286,13 +287,13 @@ CvBuildingEntry::CvBuildingEntry(void):
 	m_iInstantReligionPressure(0),
 	m_iBasePressureModGlobal(0),
 	m_iDefensePerXWonder(0),
+	m_iLocalFranchiseChance(0),
 	m_piLockedBuildingClasses(NULL),
 	m_piPrereqAndTechs(NULL),
 	m_piResourceQuantityRequirements(NULL),
 	m_piResourceQuantity(NULL),
 	m_piResourceCultureChanges(NULL),
 	m_piResourceFaithChanges(NULL),
-	m_piProductionTraits(NULL),
 	m_piSeaPlotYieldChange(NULL),
 	m_piRiverPlotYieldChange(NULL),
 	m_piLakePlotYieldChange(NULL),
@@ -314,6 +315,9 @@ CvBuildingEntry::CvBuildingEntry(void):
 	m_piYieldFromGoldenAgeStart(NULL),
 	m_piYieldChangePerGoldenAge(NULL),
 	m_piYieldChangePerGoldenAgeCap(NULL),
+	m_piYieldModifierFromDistanceToCapitalBase(NULL),
+	m_piYieldModifierFromDistanceToCapitalFalloff(NULL),
+	m_piYieldModifierFromDistanceToCapitalLimit(NULL),
 	m_piGoldenAgeYieldMod(NULL),
 	m_piYieldChangesPerLocalTheme(NULL),
 	m_piYieldFromUnitGiftGlobal(NULL),
@@ -384,6 +388,8 @@ CvBuildingEntry::CvBuildingEntry(void):
 	m_viResourceMonopolyOrs(),
 	m_piYieldChangePerMonopoly(NULL),
 	m_piYieldChangeFromPassingTR(NULL),
+	m_iRequiredPercentGlobalMonopolies(0),
+	m_iRequiredFranchises(0),
 	m_piYieldPerFranchise(NULL),
 	m_iGPRateModifierPerXFranchises(0),
 	m_piResourceQuantityPerXFranchises(NULL),
@@ -449,7 +455,6 @@ CvBuildingEntry::~CvBuildingEntry(void)
 	SAFE_DELETE_ARRAY(m_piResourceQuantity);
 	SAFE_DELETE_ARRAY(m_piResourceCultureChanges);
 	SAFE_DELETE_ARRAY(m_piResourceFaithChanges);
-	SAFE_DELETE_ARRAY(m_piProductionTraits);
 	SAFE_DELETE_ARRAY(m_piSeaPlotYieldChange);
 	SAFE_DELETE_ARRAY(m_piRiverPlotYieldChange);
 	SAFE_DELETE_ARRAY(m_piLakePlotYieldChange);
@@ -470,6 +475,9 @@ CvBuildingEntry::~CvBuildingEntry(void)
 	SAFE_DELETE_ARRAY(m_piYieldFromGoldenAgeStart);
 	SAFE_DELETE_ARRAY(m_piYieldChangePerGoldenAge);
 	SAFE_DELETE_ARRAY(m_piYieldChangePerGoldenAgeCap);
+	SAFE_DELETE_ARRAY(m_piYieldModifierFromDistanceToCapitalBase);
+	SAFE_DELETE_ARRAY(m_piYieldModifierFromDistanceToCapitalFalloff);
+	SAFE_DELETE_ARRAY(m_piYieldModifierFromDistanceToCapitalLimit);
 	SAFE_DELETE_ARRAY(m_piGoldenAgeYieldMod);
 	SAFE_DELETE_ARRAY(m_piYieldChangesPerLocalTheme);
 	SAFE_DELETE_ARRAY(m_piYieldFromUnitGiftGlobal);
@@ -905,15 +913,22 @@ bool CvBuildingEntry::CacheResults(Database::Results& kResults, CvDatabaseUtilit
 	m_iNeedBuildingThisCity = GC.getInfoTypeForString(szTextVal, true);
 	m_iGrantsRandomResourceTerritory = kResults.GetInt("GrantsRandomResourceTerritory");
 	m_bPuppetPurchaseOverride = kResults.GetBool("PuppetPurchaseOverride");
+	m_bRequiresPuppet = kResults.GetBool("RequiresPuppet");
 	m_bAllowsPuppetPurchase = kResults.GetBool("AllowsPuppetPurchase");
 	m_bNoStarvationNonSpecialist = kResults.GetBool("NoStarvationNonSpecialist");
 	m_iMinimumFood = kResults.GetInt("MinimumFood");
 	m_iGetCooldown = kResults.GetInt("PurchaseCooldown");
 	m_iNumPoliciesNeeded = kResults.GetInt("NumPoliciesNeeded");
+	m_iRequiredPercentGlobalMonopolies = kResults.GetInt("RequiresXPercentGlobalMonopolies");
+	m_iRequiredFranchises = kResults.GetInt("RequiresXFranchises");
 
 	szTextVal = kResults.GetText("SpecialistType");
 	m_iSpecialistType = GC.getInfoTypeForString(szTextVal, true);
 	m_iSpecialistCount = kResults.GetInt("SpecialistCount");
+	ASSERT(m_iSpecialistCount == 0 || m_iSpecialistType > -1, "Mod error: Building %s has SpecialistCount > 0, but no valid SpecialistType is specified", kResults.GetText("Type"));
+	if (m_iSpecialistType == -1)
+		m_iSpecialistCount = 0;
+
 	m_iSpecialistExtraCulture = kResults.GetInt("SpecialistExtraCulture");
 	m_iGreatPeopleRateChange= kResults.GetInt("GreatPeopleRateChange");
 
@@ -946,6 +961,8 @@ bool CvBuildingEntry::CacheResults(Database::Results& kResults, CvDatabaseUtilit
 	m_iBasePressureModGlobal = kResults.GetInt("BasePressureModifierGlobal");
 	m_iDefensePerXWonder = kResults.GetInt("DefensePerXWonder");
 
+	m_iLocalFranchiseChance = kResults.GetInt("LocalFranchiseChance");
+
 	//Arrays
 	const char* szBuildingType = GetType();
 
@@ -971,6 +988,9 @@ bool CvBuildingEntry::CacheResults(Database::Results& kResults, CvDatabaseUtilit
 	kUtility.SetYields(m_piYieldFromGoldenAgeStart, "Building_YieldFromGoldenAgeStart", "BuildingType", szBuildingType);
 	kUtility.SetYields(m_piYieldChangePerGoldenAge, "Building_YieldChangesPerGoldenAge", "BuildingType", szBuildingType);
 	kUtility.PopulateArrayByValue(m_piYieldChangePerGoldenAgeCap, "Yields", "Building_YieldChangesPerGoldenAge", "YieldType", "BuildingType", szBuildingType, "YieldCap");
+	kUtility.PopulateArrayByValue(m_piYieldModifierFromDistanceToCapitalBase, "Yields", "Building_YieldModifiersFromDistanceToCapital", "YieldType", "BuildingType", szBuildingType, "YieldBase");
+	kUtility.PopulateArrayByValue(m_piYieldModifierFromDistanceToCapitalFalloff, "Yields", "Building_YieldModifiersFromDistanceToCapital", "YieldType", "BuildingType", szBuildingType, "YieldFalloff");
+	kUtility.PopulateArrayByValue(m_piYieldModifierFromDistanceToCapitalLimit, "Yields", "Building_YieldModifiersFromDistanceToCapital", "YieldType", "BuildingType", szBuildingType, "YieldLimit");
 	kUtility.SetYields(m_piGoldenAgeYieldMod, "Building_GoldenAgeYieldMod", "BuildingType", szBuildingType);
 	kUtility.SetYields(m_piYieldChangesPerLocalTheme, "Building_YieldChangesPerLocalTheme", "BuildingType", szBuildingType);
 	kUtility.SetYields(m_piYieldFromUnitGiftGlobal, "Building_YieldFromUnitGiftGlobal", "BuildingType", szBuildingType);
@@ -1074,8 +1094,6 @@ bool CvBuildingEntry::CacheResults(Database::Results& kResults, CvDatabaseUtilit
 	kUtility.PopulateArrayByValue(m_paiHurryModifier, "HurryInfos", "Building_HurryModifiers", "HurryType", "BuildingType", szBuildingType, "HurryCostModifier");
 	kUtility.PopulateArrayByValue(m_paiHurryModifierLocal, "HurryInfos", "Building_HurryModifiersLocal", "HurryType", "BuildingType", szBuildingType, "HurryCostModifier");
 	kUtility.PopulateArrayByValue(m_paiResourceHappinessChange, "Resources", "Building_ResourceHappinessChange", "ResourceType", "BuildingType", szBuildingType, "HappinessChange");
-
-	//kUtility.PopulateArrayByValue(m_piProductionTraits, "Traits", "Building_ProductionTraits", "TraitType", "BuildingType", szBuildingType, "Trait");
 
 	kUtility.PopulateArrayByValue(m_piUnitCombatFreeExperience, "UnitCombatInfos", "Building_UnitCombatFreeExperiences", "UnitCombatType", "BuildingType", szBuildingType, "Experience");
 	kUtility.PopulateArrayByValue(m_piUnitCombatProductionModifiers, "UnitCombatInfos", "Building_UnitCombatProductionModifiers", "UnitCombatType", "BuildingType", szBuildingType, "Modifier");
@@ -2101,6 +2119,11 @@ int CvBuildingEntry::GrantsRandomResourceTerritory() const
 bool CvBuildingEntry::IsPuppetPurchaseOverride() const
 {
 	return m_bPuppetPurchaseOverride;
+}
+/// Is this building only buildable in puppets?
+bool CvBuildingEntry::IsRequiresPuppet() const
+{
+	return m_bRequiresPuppet;
 }
 /// Does this building unlock purchasing in any city?
 bool CvBuildingEntry::IsAllowsPuppetPurchase() const
@@ -3419,6 +3442,11 @@ int CvBuildingEntry::GetDefensePerXWonder() const
 	return m_iDefensePerXWonder;
 }
 
+int CvBuildingEntry::GetLocalFranchiseChance() const
+{
+	return m_iLocalFranchiseChance;
+}
+
 int CvBuildingEntry::GetBasePressureModGlobal() const
 {
 	return m_iBasePressureModGlobal;
@@ -3630,7 +3658,31 @@ int* CvBuildingEntry::GetYieldChangePerGoldenAgeCapArray() const
 	return m_piYieldChangePerGoldenAgeCap;
 }
 
-/// Change to yield during golden ages
+/// Yield Modifier from distance to capital - base value
+int CvBuildingEntry::GetYieldModifierFromDistanceToCapitalBase(int i) const
+{
+	PRECONDITION(i < NUM_YIELD_TYPES, "Index out of bounds");
+	PRECONDITION(i > -1, "Index out of bounds");
+	return m_piYieldModifierFromDistanceToCapitalBase ? m_piYieldModifierFromDistanceToCapitalBase[i] : -1;
+}
+
+/// Yield Modifier from distance to capital - falloff
+int CvBuildingEntry::GetYieldModifierFromDistanceToCapitalFalloff(int i) const
+{
+	PRECONDITION(i < NUM_YIELD_TYPES, "Index out of bounds");
+	PRECONDITION(i > -1, "Index out of bounds");
+	return m_piYieldModifierFromDistanceToCapitalFalloff ? m_piYieldModifierFromDistanceToCapitalFalloff[i] : -1;
+}
+
+/// Yield Modifier from distance to capital - limit
+int CvBuildingEntry::GetYieldModifierFromDistanceToCapitalLimit(int i) const
+{
+	PRECONDITION(i < NUM_YIELD_TYPES, "Index out of bounds");
+	PRECONDITION(i > -1, "Index out of bounds");
+	return m_piYieldModifierFromDistanceToCapitalLimit ? m_piYieldModifierFromDistanceToCapitalLimit[i] : -1;
+}
+
+/// Yield changes per themed great work in the building
 int CvBuildingEntry::GetYieldChangesPerLocalTheme(int i) const
 {
 	PRECONDITION(i < NUM_YIELD_TYPES, "Index out of bounds");
@@ -4405,14 +4457,6 @@ int CvBuildingEntry::GetResourceFaithChange(int i) const
 	return m_piResourceFaithChanges ? m_piResourceFaithChanges[i] : -1;
 }
 
-/// Boost in production for leader with this trait
-int CvBuildingEntry::GetProductionTraits(int i) const
-{
-	PRECONDITION(i < GC.getNumTraitInfos(), "Index out of bounds");
-	PRECONDITION(i > -1, "Index out of bounds");
-	return m_piProductionTraits ? m_piProductionTraits[i] : 0;
-}
-
 /// Number of prerequisite buildings of a particular class
 int CvBuildingEntry::GetPrereqNumOfBuildingClass(int i) const
 {
@@ -4486,7 +4530,19 @@ int CvBuildingEntry::GetResourceMonopolyOr(uint ui) const
 	PRECONDITION(ui < m_viResourceMonopolyOrs.size(), "Index out of bounds");
 	return m_viResourceMonopolyOrs[ui];
 }
-//Coroporation Stuff
+/// Requires certain percent of the world's global monopolies to build
+int CvBuildingEntry::GetRequiredPercentGlobalMonopolies() const
+{
+	return m_iRequiredPercentGlobalMonopolies;
+}
+
+/// Corporation Stuff
+/// Requires certain number of franchises to build
+int CvBuildingEntry::GetRequiredFranchises() const
+{
+	return m_iRequiredFranchises;
+}
+/// GP bonus per franchise
 int CvBuildingEntry::GetGPRateModifierPerXFranchises() const
 {
 	return m_iGPRateModifierPerXFranchises;

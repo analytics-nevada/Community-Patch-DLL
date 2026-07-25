@@ -587,7 +587,7 @@ public:
 	void SetAdditionalFood(int iValue);
 
 	int getPopulation(bool bIncludeAutomatons = false) const;
-	void setPopulation(int iNewValue, bool bReassignPop = true, bool bNoBonus = false);
+	void setPopulation(int iNewValue, bool bReassignPop = true);
 	void changePopulation(int iChange, bool bReassignPop = true, bool bIgnoreStaticUpdate = false);
 
 	void setLowestRazingPop(int iValue);
@@ -656,7 +656,11 @@ public:
 	int GetWonderProductionModifier() const;
 	void ChangeWonderProductionModifier(int iChange);
 
-	int GetLocalResourceWonderProductionMod(BuildingTypes eBuilding, CvString* toolTipSink = NULL) const;
+	int GetWonderProductionModifierFromLocalResources(BuildingTypes eBuilding, CvString* toolTipSink = NULL) const;
+	int GetWonderProductionModifierFromLocalResources(EraTypes eEra) const; // generic version taking in only the building era
+	int GetWonderProductionModifierFromReligion(EraTypes eEra) const;
+	int GetWonderProductionModifierFromUnits() const;
+	int GetWonderProductionModifierFromImprovements() const;
 
 	int getCapturePlunderModifier() const;
 	void changeCapturePlunderModifier(int iChange);
@@ -1103,6 +1107,15 @@ public:
 	int GetGoldenAgeYieldMod(YieldTypes eIndex) const;
 	void ChangeGoldenAgeYieldMod(YieldTypes eIndex, int iChange);
 
+	int GetYieldModifierFromDistanceToCapitalBase(YieldTypes eIndex) const;
+	void ChangeYieldModifierFromDistanceToCapitalBase(YieldTypes eIndex, int iChange);
+
+	int GetYieldModifierFromDistanceToCapitalFalloff(YieldTypes eIndex) const;
+	void ChangeYieldModifierFromDistanceToCapitalFalloff(YieldTypes eIndex, int iChange);
+	
+	int GetYieldModifierFromDistanceToCapitalLimit(YieldTypes eIndex) const;
+	void ChangeYieldModifierFromDistanceToCapitalLimit(YieldTypes eIndex, int iChange);
+
 	int GetYieldChangesPerLocalTheme(YieldTypes eIndex) const;
 	void ChangeYieldChangesPerLocalTheme(YieldTypes eIndex, int iChange);
 
@@ -1438,8 +1451,8 @@ public:
 
 	void doFoundMessage();
 
-	bool IsExtraLuxuryResources();
-	void SetExtraLuxuryResources(int iNewValue);
+	int GetExtraResources(ResourceTypes eResource);
+	void ChangeExtraResources(ResourceTypes eResource, int iChange);
 	void ChangeExtraLuxuryResources(int iChange);
 
 	CvCityBuildings* GetCityBuildings() const;
@@ -1822,6 +1835,9 @@ public:
 	void ChangeVassalLevyEra(int iChange);
 	int GetVassalLevyEra() const;
 
+	void ChangeLocalFranchiseChance(int iChange);
+	int GetLocalFranchiseChance() const;
+
 	void SpawnFreeUnit(UnitTypes eUnit);
 	int SpawnPlayerUnitsNearby(const PlayerTypes ePlayer, const int iNumber, const bool bIncludeUUs = false, bool bIncludeShips = false, const bool bNoResource = false) const;
 
@@ -1927,7 +1943,6 @@ protected:
 	int m_iResistanceTurns;
 	int m_iRazingTurns;
 	int m_iLowestRazingPop;
-	int m_iCountExtraLuxuries;
 	int m_iCheapestPlotInfluenceDistance;
 	int m_iEspionageModifier;
 	int m_iSpySecurityModifier;
@@ -1938,6 +1953,7 @@ protected:
 
 	OperationSlot m_unitBeingBuiltForOperation;
 
+	std::vector<int> m_aiExtraResources;
 	bool m_bNeverLost;
 	bool m_bDrafted;
 	bool m_bProductionAutomated;
@@ -1995,6 +2011,9 @@ protected:
 	std::vector<int> m_aiYieldChangePerGoldenAgeCap;
 	std::vector<int> m_aiYieldFromPreviousGoldenAges;
 	std::vector<int> m_aiGoldenAgeYieldMod;
+	std::vector<int> m_aiYieldModifierFromDistanceToCapitalBase;
+	std::vector<int> m_aiYieldModifierFromDistanceToCapitalFalloff;
+	std::vector<int> m_aiYieldModifierFromDistanceToCapitalLimit;
 	std::vector<int> m_aiYieldChangesPerLocalTheme;
 	std::vector<int> m_aiYieldFromUnitGiftGlobal;
 	std::vector<int> m_aiYieldFromWLTKD;
@@ -2232,6 +2251,8 @@ protected:
 
 	int m_iVassalLevyEra;
 
+	int m_iLocalFranchiseChance;
+
 	bool m_bConnectedToOcean;
 
 	//cache for great work yields, they are need often during citizen re-assignment but they don't change
@@ -2246,6 +2267,7 @@ protected:
 	void doMeltdown();
 	void doUnitCompletionYields(CvUnit* pUnit, UnitCreationReason eReason);
 	bool doCheckProduction();
+	void DoRandomFranchise();
 
 	//we can pretend a garrison in this city, but only for limited time
 	void OverrideGarrison(const CvUnit* pUnit) const;
@@ -2342,7 +2364,7 @@ SYNC_ARCHIVE_VAR(int, m_iDemandResourceCounter)
 SYNC_ARCHIVE_VAR(int, m_iResistanceTurns)
 SYNC_ARCHIVE_VAR(int, m_iRazingTurns)
 SYNC_ARCHIVE_VAR(int, m_iLowestRazingPop)
-SYNC_ARCHIVE_VAR(int, m_iCountExtraLuxuries)
+SYNC_ARCHIVE_VAR(std::vector<int>, m_aiExtraResources)
 SYNC_ARCHIVE_VAR(int, m_iCheapestPlotInfluenceDistance)
 SYNC_ARCHIVE_VAR(int, m_iEspionageModifier)
 SYNC_ARCHIVE_VAR(int, m_iSpySecurityModifier)
@@ -2607,6 +2629,8 @@ SYNC_ARCHIVE_VAR(std::vector<int>, m_aiBuildingCostInvestmentReduction)
 SYNC_ARCHIVE_VAR(std::vector<bool>, m_abUnitInvestment)
 SYNC_ARCHIVE_VAR(std::vector<int>, m_aiUnitCostInvestmentReduction)
 SYNC_ARCHIVE_VAR(std::vector<bool>, m_abBuildingConstructed)
+SYNC_ARCHIVE_VAR(int, m_iVassalLevyEra)
+SYNC_ARCHIVE_VAR(int, m_iLocalFranchiseChance)
 SYNC_ARCHIVE_END()
 
 //just a guard class so we never forget to unset the garrison override

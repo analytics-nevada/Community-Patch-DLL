@@ -971,7 +971,7 @@ function GetHelpTextForUnit(eUnit, bIncludeRequirementsInfo, pCity, bExcludeName
 	AddTooltipIfTrue(tAbilityLines, "TXT_KEY_PRODUCTION_UNIT_EXTRA_PLUNDER_GOLD", kUnitInfo.HighSeaRaider);
 	AddTooltipIfTrue(tAbilityLines, "TXT_KEY_PRODUCTION_UNIT_EXPEND_COPY_TILE_YIELD", kUnitInfo.CopyYieldsFromExpendTile);
 	AddTooltipIfTrue(tAbilityLines, "TXT_KEY_PRODUCTION_UNIT_MOVE_AFTER_UPGRADE", kUnitInfo.MoveAfterUpgrade);
-	
+
 	AddTooltipPositive(tAbilityLines, "TXT_KEY_PRODUCTION_UNIT_CULTURE_ON_DISBAND_UPGRADE", kUnitInfo.CulExpOnDisbandUpgrade);
 
 	-- Block/weaken active spread
@@ -2369,6 +2369,9 @@ function GetHelpTextForBuilding(eBuilding, bExcludeName, _, bNoMaintenance, pCit
 	-- Production modifier from trade routes with city states
 	AddTooltipNonZeroSigned(tLocalAbilityLines, "TXT_KEY_PRODUCTION_BUILDING_PRODUCTION_MODIFIER_FROM_MINOR_TRADE_ROUTES", kBuildingInfo.CityStateTradeRouteProductionModifier);
 
+	-- Chance a random foriegn franchise appears each turn
+	AddTooltipNonZeroSigned(tLocalAbilityLines, "TXT_KEY_PRODUCTION_BUILDING_LOCAL_FRANCHISE_CHANCE", kBuildingInfo.LocalFranchiseChance);
+
 	-- Discover tech science modifier
 	AddTooltipNonZeroSigned(tGlobalAbilityLines, "TXT_KEY_PRODUCTION_BUILDING_DISCOVER_TECH_SCIENCE_MODIFIER", kBuildingInfo.GreatScientistBeakerModifier);
 
@@ -2689,7 +2692,7 @@ function GetHelpTextForBuilding(eBuilding, bExcludeName, _, bNoMaintenance, pCit
 	else
 		AddTooltipPositive(tGlobalAbilityLines, "TXT_KEY_PRODUCTION_BUILDING_FREE_SPIES", kBuildingInfo.ExtraSpies);
 	end
-	
+
 	for row in GameInfo.Building_BonusFromAccomplishments{BuildingType = kBuildingInfo.Type} do
 		local kAccomplishmentInfo = GameInfo.Accomplishments[row.AccomplishmentType];
 		if MOD_BALANCE_SPY_POINTS then
@@ -3250,7 +3253,11 @@ function GetHelpTextForBuilding(eBuilding, bExcludeName, _, bNoMaintenance, pCit
 		AddTooltipIfTrue(tReqLines, "TXT_KEY_PRODUCTION_BUILDING_NO_RIVER", kBuildingInfo.IsNoRiver);
 		AddTooltipIfTrue(tReqLines, "TXT_KEY_PRODUCTION_BUILDING_NO_COASTAL", kBuildingInfo.IsNoCoast);
 		AddTooltipIfTrue(tReqLines, "TXT_KEY_PRODUCTION_BUILDING_INDUSTRIAL_CONNECTION", kBuildingInfo.RequiresIndustrialCityConnection);
+		AddTooltipIfTrue(tReqLines, "TXT_KEY_PRODUCTION_BUILDING_PUPPET", kBuildingInfo.RequiresPuppet);
 		AddTooltipIfTrue(tReqLines, "TXT_KEY_PRODUCTION_BUILDING_OCCUPIED_ONLY", kBuildingInfo.NoOccupiedUnhappiness and not kBuildingInfo.BuildAnywhere);
+
+		AddTooltipPositive(tReqLines, "TXT_KEY_PRODUCTION_BUILDING_NUM_FRANCHISES", kBuildingInfo.RequiresXFranchises);
+		AddTooltipPositive(tReqLines, "TXT_KEY_PRODUCTION_BUILDING_PERCENT_MONOPOLIES", kBuildingInfo.RequiresXPercentGlobalMonopolies);
 
 		-- Coastal or whatever custom water size
 		if kBuildingInfo.Water then
@@ -3745,7 +3752,7 @@ function GetHelpTextForBuilding(eBuilding, bExcludeName, _, bNoMaintenance, pCit
 					tAccomplishmentBoosts[eAccomplishment][eYield] = tAccomplishmentBoosts[eAccomplishment][eYield] + row.Yield;
 				end
 			end
-			
+
 			for row in GameInfo.Building_YieldModifiersFromAccomplishments{BuildingType = kBuildingInfo.Type, YieldType = kYieldInfo.Type} do
 				local kAccomplishmentInfo = GameInfo.Accomplishments[row.AccomplishmentType];
 				local eAccomplishment = kAccomplishmentInfo.ID;
@@ -3841,11 +3848,11 @@ function GetHelpTextForBuilding(eBuilding, bExcludeName, _, bNoMaintenance, pCit
 			for row in GameInfo.Building_YieldPerFriendTimes100{BuildingType = kBuildingInfo.Type, YieldType = kYieldInfo.Type} do
 				tCSFriendBoosts[eYield] = row.Yield / 100;
 			end
-			
+
 			for row in GameInfo.Building_YieldPerAllyTimes100{BuildingType = kBuildingInfo.Type, YieldType = kYieldInfo.Type} do
 				tCSAllyBoosts[eYield] = row.Yield / 100;
 			end
-			
+
 			local iGAYield = 0;
 			local iGAYieldCap = 0;
 			for row in GameInfo.Building_YieldChangesPerGoldenAge{BuildingType = kBuildingInfo.Type, YieldType = kYieldInfo.Type} do
@@ -3976,6 +3983,24 @@ function GetHelpTextForBuilding(eBuilding, bExcludeName, _, bNoMaintenance, pCit
 
 		if next(tGABoosts) then
 			AddTooltip(tLocalBoostLines, "TXT_KEY_PRODUCTION_BUILDING_YIELD_BOOST_FROM_GOLDEN_AGE_START", table.concat(tGABoosts, " "), table.concat(tGABoostCaps, " "));
+		end
+
+		for row in GameInfo.Building_YieldModifiersFromDistanceToCapital{BuildingType = kBuildingInfo.Type} do
+			local yieldInfo = GameInfo.Yields[row.YieldType];
+			if row.YieldFalloff > 0 then
+				if row.YieldBase ~= 0 then
+					AddTooltip(tLocalBoostLines, "TXT_KEY_PRODUCTION_BUILDING_YIELD_MODIFIER_FROM_DISTANCE_TO_CAPITAL_INCREASING_WITH_BASE_VALUE", GetYieldModifierString(yieldInfo, row.YieldBase), row.YieldFalloff, row.YieldLimit)
+				else
+					AddTooltip(tLocalBoostLines, "TXT_KEY_PRODUCTION_BUILDING_YIELD_MODIFIER_FROM_DISTANCE_TO_CAPITAL_INCREASING", GetYieldModifierString(yieldInfo, row.YieldFalloff), row.YieldLimit)
+				end
+			elseif row.YieldFalloff < 0 then
+				if row.YieldBase ~= 0 then
+					AddTooltip(tLocalBoostLines, "TXT_KEY_PRODUCTION_BUILDING_YIELD_MODIFIER_FROM_DISTANCE_TO_CAPITAL_DECREASING_WITH_BASE_VALUE", GetYieldModifierString(yieldInfo, row.YieldBase), -row.YieldFalloff, row.YieldLimit) -- the minus here is intentional
+
+				else
+					AddTooltip(tLocalBoostLines, "TXT_KEY_PRODUCTION_BUILDING_YIELD_MODIFIER_FROM_DISTANCE_TO_CAPITAL_DECREASING", GetYieldModifierString(yieldInfo, row.YieldFalloff),  row.YieldLimit)
+				end
+			end
 		end
 
 		local tBoostsFromResource = {};

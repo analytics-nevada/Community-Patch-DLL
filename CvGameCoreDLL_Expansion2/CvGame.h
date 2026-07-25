@@ -151,6 +151,13 @@ public:
 	int getTurnYear(int iGameTurn) const;
 	int getGameTurnYear();
 
+	// Persistent unique identifier for this game, generated once at game start and preserved across save/load.
+	const CvString& getGameId() const;
+
+	// Compact integer id for this game's UUID, resolved from the local stats.db uuid_dictionary.
+	// Not serialized; recomputed per machine from the string game id.
+	int getGameDatabaseId() const;
+
 	int getElapsedGameTurns() const;
 	void incrementElapsedGameTurns();
 
@@ -691,6 +698,9 @@ public:
 	int GetTurnsUntilMinorCivElection();
 
 	void LogMapState() const;
+	void LogMapPlotsState() const;
+	void LogMapUnitsState() const;
+	void LogCivTurnEra() const;
 	void LogGameState(bool bLogHeaders = false) const;
 	void unitIsMoving() const;
 
@@ -799,7 +809,7 @@ public:
 	bool DeleteMPMP();
 	bool CreateMPMP();
 	bool WriteMPMP(const char* szFileName, const char* szDataBase, bool bInitialize);
-	bool CopyModDataToMPMP(const char* szModFolder, const char* szId, const char* szVersion);
+	bool CopyModDataToMPMP(const char* szModName, const char* szId, const char* szVersion);
 	int DeleteDirectory(const string& refcstrRootDirectory, bool bDeleteSubdirectories);
 	int OverrideGamePlayFiles(const string& refcstrRootDirectory);
 	int CopyModFiles(const string& strModDirectory, const string& strDLCDirectory, const string& strRootModSource);
@@ -807,6 +817,9 @@ public:
 	CvString GetModFromIdAndVersion(const string& refcstrRootDirectory,const string& modName, const string& id, const string& version);
 
 protected:
+
+	// Resolves m_intGameId from m_strGameId via the local stats.db uuid_dictionary. No-op when logging is off.
+	void resolveGameDatabaseId();
 
 	// exe things
 	CvBinType m_eExeBinType;
@@ -916,6 +929,10 @@ protected:
 	CvEnumMap<ResourceTypes, PlayerTypes> m_aiGreatestMonopolyPlayer;
 
 	CvString m_strScriptData;
+
+	CvString m_strGameId;
+
+	int m_intGameId;
 
 	CvEnumMap<PlayerTypes, int> m_aiEndTurnMessagesReceived;
 	CvEnumMap<PlayerTypes, int> m_aiRankPlayer;		// Ordered by rank...

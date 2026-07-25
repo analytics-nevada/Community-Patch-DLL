@@ -135,6 +135,9 @@ ALTER TABLE Buildings ADD ResourceType text REFERENCES Resources (Type);
 -- Allows for Building to be purchased in puppet city
 ALTER TABLE Buildings ADD PuppetPurchaseOverride boolean DEFAULT 0;
 
+-- The building can only be built in a puppet city
+ALTER TABLE Buildings ADD RequiresPuppet boolean DEFAULT 0;
+
 -- Allows for Building to grant a single WC vote (or any value) - not scaled by CS
 ALTER TABLE Buildings ADD SingleLeagueVotes integer DEFAULT 0;
 
@@ -234,6 +237,8 @@ ALTER TABLE Buildings ADD TRSpeedBoost integer DEFAULT 0;
 ALTER TABLE Buildings ADD TRVisionBoost integer DEFAULT 0;
 ALTER TABLE Buildings ADD TRTurnModGlobal integer DEFAULT 0; -- modifies the turns a TR takes to complete, an int between 100 and -100, like a percent
 ALTER TABLE Buildings ADD TRTurnModLocal integer DEFAULT 0;
+ALTER TABLE Buildings ADD RequiresXFranchises integer DEFAULT 0;
+ALTER TABLE Buildings ADD RequiresXPercentGlobalMonopolies integer DEFAULT 0;
 
 -- CSD
 ALTER TABLE Buildings ADD DPToVotes integer DEFAULT 0;
@@ -319,6 +324,19 @@ ALTER TABLE Buildings ADD DefensePerXWonder integer DEFAULT 0;
 
 -- Modifier for ranged combat strength of garrison when attacking
 ALTER TABLE Buildings ADD GarrisonRangedAttackModifier integer DEFAULT 0;
+
+-- Chance of a random eligible franchise appearing in the city each turn
+-- Eligibility:
+-- City must not be being razed
+-- City is within trade route range of a foreign city that:
+	-- Is not nationalized
+	-- Has an office with a franchise that this city doesn't have
+-- City must be allowed to have franchises (not nationalized unless city owner is the vassal of the foreign city owner)
+-- City owner must be already trading with the foreign city owner (doesn't matter in which city or who originates)
+-- Basically the inverse of the CvPlayerCorporations::BuildRandomFranchiseInCity() function
+-- Unlike the above function, this picks from all eligible franchises randomly unweighted
+-- DOES NOTHING FOR MINOR/BARBARIAN CITIES
+ALTER TABLE Buildings ADD LocalFranchiseChance integer DEFAULT 0;
 
 -- GLOBAL_GREATWORK_YIELDTYPES
 ALTER TABLE Buildings ADD GreatWorkYieldType text REFERENCES Yields (Type) DEFAULT 'YIELD_CULTURE';

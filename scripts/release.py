@@ -56,6 +56,7 @@ MODS = {
     "(3a) VP - EUI Compatibility Files": "VP EUI Compatibility.civ5proj",
     "(3b) 43 Civs Community Patch": "43 Civs Community Patch.civ5proj",
     "(4a) Squads for VP": "Squads.civ5proj",
+    "(5) Modpack Maker for VP": "Modpack Maker.civ5proj",
 }
 
 # Files to update
@@ -253,6 +254,7 @@ def update_dependency_min_versions(old_mod_version: int, new_mod_version: int):
         "(3a) VP - EUI Compatibility Files",
         "(3b) 43 Civs Community Patch",
         "(4a) Squads for VP",
+        "(5) Modpack Maker for VP",
     ]
 
     for mod_folder in dependent_mods:
@@ -942,14 +944,14 @@ def main():
     print("  6. Generate release notes, then edit the description to match this template:")
     print()
     print("    ---")
-    print("    **Release Notes Thread:**")
+    print("**Release Notes Thread:**")
     print()
-    print("    **GitHub Changes Summary:** <Insert the link next to \"Full Changelog\" here>")
+    print("**GitHub Changes Summary:** <Insert the link next to \"Full Changelog\" here>")
     print()
-    print("    ## Pull Requests Summary")
-    print("    <Insert pull requests list>")
+    print("## Pull Requests Summary")
+    print("<Insert pull requests list>")
     print()
-    print("    <Leave anything else that was added as part of the auto-generated notes at the end>")
+    print("<Leave anything else that was added as part of the auto-generated notes at the end>")
     print("    ---")
     print()
     print("  7. Publish the release")

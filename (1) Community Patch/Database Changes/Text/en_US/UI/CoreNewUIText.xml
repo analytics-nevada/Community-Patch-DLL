@@ -143,6 +143,9 @@
 		<Row Tag="TXT_KEY_ABLTY_CITY_INDIRECT_INCREASE">
 			<Text>+1 City Indirect Attack Range</Text>
 		</Row>
+		<Row Tag="TXT_KEY_ALLOWS_EXTRA_LUXURIES">
+			<Text>Unlocks Projects that increase local Luxury copies</Text>
+		</Row>
 
 		<!-- Theming bonus -->
 		<Row Tag="TXT_KEY_CO_TOURISM_THEME_BONUS">
@@ -230,9 +233,54 @@
 		<Row Tag="TXT_KEY_TP_CULTURE_PER_TURN">
 			<Text>+{1_Num} [ICON_CULTURE] Culture Per Turn.</Text>
 		</Row>
+		<Row Tag="TXT_KEY_TP_CULTURE_CITY_COST_DETAIL">
+			<Text>[ICON_BULLET]Next Policy cost: {1_Num} [ICON_CULTURE] Culture = {2_Num} [ICON_CULTURE] base + {3_Num} [ICON_CULTURE] (+{5_Str}% from {7_Num} non-Capital {7_Num: plural 1?city; other?cities;}).[NEWLINE][ICON_BULLET]Gaining a new City will add [COLOR_NEGATIVE_TEXT]+{4_Num}[ENDCOLOR] [ICON_CULTURE] (+{6_Str}% of base).</Text>	
+		</Row>
+		<Row Tag="TXT_KEY_TP_POLICY_TENET_PENALTY_EXPLAINER">
+			<Text>Each Tenet increases future Policy costs: Tier 1 [COLOR_NEGATIVE_TEXT]+{1_Num}%[ENDCOLOR], Tier 2 [COLOR_NEGATIVE_TEXT]+{2_Num}%[ENDCOLOR], Tier 3 [COLOR_NEGATIVE_TEXT]+{3_Num}%[ENDCOLOR].</Text>
+		</Row>
+		<Row Tag="TXT_KEY_TP_POLICY_DISCOUNT_HEADER">
+			<Text>Policy cost changes:</Text>
+		</Row>
+		<Row Tag="TXT_KEY_TP_POLICY_DISCOUNT_FROM_POLICIES">
+			<Text>[ICON_BULLET][COLOR_POSITIVE_TEXT]-{1_Num}%[ENDCOLOR] from adopted Policies and Tenets.</Text>
+		</Row>
+		<Row Tag="TXT_KEY_TP_POLICY_DISCOUNT_FROM_BUILDINGS">
+			<Text>[ICON_BULLET][COLOR_POSITIVE_TEXT]-{1_Num}%[ENDCOLOR] from Buildings.</Text>
+		</Row>
+		<Row Tag="TXT_KEY_TP_POLICY_DISCOUNT_FROM_MINOR_CIVS">
+			<Text>[ICON_BULLET][COLOR_POSITIVE_TEXT]-{1_Num}%[ENDCOLOR] from City-State modifiers.</Text>
+		</Row>
+		<Row Tag="TXT_KEY_TP_POLICY_DISCOUNT_FROM_TRAITS">
+			<Text>[ICON_BULLET][COLOR_POSITIVE_TEXT]-{1_Num}%[ENDCOLOR] from Civilization Traits.</Text>
+		</Row>
+		<Row Tag="TXT_KEY_TP_POLICY_TENET_PENALTY">
+			<Text>[ICON_BULLET][COLOR_NEGATIVE_TEXT]+{1_Num}%[ENDCOLOR] from {2_Num} adopted {2_Num: plural 1?Tenet; other?Tenets;}.</Text>
+		</Row>
+		<Row Tag="TXT_KEY_TP_POLICY_DISCOUNT_FORMULA">
+			<Text>adjust base [ICON_CULTURE] Policy cost: {1_Num} [ICON_CULTURE]{2_Str}{3_Str}{4_Str} = {5_Num} [ICON_CULTURE].</Text>
+		</Row>
 		<!-- Science -->
 		<Row Tag="TXT_KEY_TP_SCIENCE_PER_TURN">
 			<Text>+{1_Num} [ICON_RESEARCH] Science Per Turn.</Text>
+		</Row>
+		<Row Tag="TXT_KEY_TP_TECH_CITY_COST_DETAIL">
+			<Text>[ICON_BULLET]Current Technology cost: {1_Num} [ICON_RESEARCH] Science = {2_Num} [ICON_RESEARCH] base + {3_Num} [ICON_RESEARCH] (+{5_Str}% from {7_Num} {7_Num: plural 1?city; other?cities;}).[NEWLINE][ICON_BULLET]Gaining a new City will add [COLOR_NEGATIVE_TEXT]+{4_Num}[ENDCOLOR] [ICON_RESEARCH] (+{6_Str}% of base).</Text>
+		</Row>
+		<Row Tag="TXT_KEY_TP_TECH_DISCOUNT_HEADER">
+			<Text>Technology cost divisors:</Text>
+		</Row>
+		<Row Tag="TXT_KEY_TP_TECH_CATCHUP_DISCOUNT">
+			<Text>[ICON_BULLET][COLOR_POSITIVE_TEXT]{1_Str}%[ENDCOLOR] from {2_Num}/{3_Num} known Civilizations having this technology.</Text>
+		</Row>
+		<Row Tag="TXT_KEY_TP_TECH_PREREQ_DISCOUNT">
+			<Text>[ICON_BULLET][COLOR_POSITIVE_TEXT]{1_Str}%[ENDCOLOR] from known optional prerequisite technologies.</Text>
+		</Row>
+		<Row Tag="TXT_KEY_TP_TECH_DISCOUNT_FORMULA_NO_SCHOLAR">
+			<Text>reduce base [ICON_RESEARCH] Technology cost: {1_Num} [ICON_RESEARCH] / [COLOR_POSITIVE_TEXT]{3_Num}%[ENDCOLOR] = {4_Num} [ICON_RESEARCH].</Text>
+		</Row>
+		<Row Tag="TXT_KEY_TP_TECH_DISCOUNT_FORMULA_WITH_SCHOLAR">
+			<Text>reduce base [ICON_RESEARCH] Technology cost: {1_Num} [ICON_RESEARCH] / ([COLOR_POSITIVE_TEXT]{2_Num}%[ENDCOLOR] x [COLOR_POSITIVE_TEXT]{3_Num}%[ENDCOLOR]) = {5_Num} [ICON_RESEARCH].</Text>
 		</Row>
 		<!-- Tourism -->
 		<Row Tag="TXT_KEY_TP_TOURISM_PER_TURN">
@@ -1126,6 +1174,9 @@
 		<Row Tag="TXT_KEY_PRODUCTION_BUILDING_REDUCED_GLOBAL_FOLLOWER_REQUIREMENT">
 			<Text>{2_Sign}{1_Num}% Worldwide Follower Requirement for all Buildings</Text>
 		</Row>
+		<Row Tag="TXT_KEY_PRODUCTION_BUILDING_LOCAL_FRANCHISE_CHANCE">
+			<Text>{2_Sign}{1_Num}% chance a random eligible foreign [ICON_FRANCHISE] Franchise is established in this City each turn</Text>
+		</Row>
 		<Row Tag="TXT_KEY_PRODUCTION_BUILDING_YIELD_FROM_OTHER_YIELD">
 			<Text>{1_Num}% of City {2_YieldIcon} {3_Yield:textkey} output (pre-Modifiers) is added to City {4_YieldIcon} {5_Yield:textkey} output (post-Modifiers)</Text>
 		</Row>
@@ -1238,10 +1289,10 @@
 			<Text>When adopting a Policy: {1_InstantYield}</Text>
 		</Row>
 		<Row Tag="TXT_KEY_PRODUCTION_BUILDING_INSTANT_YIELD_ON_GOLDEN_AGE_START">
-			<Text>When starting a [ICON_GOLDEN_AGE] Golden Age: {1_InstantYield}</Text>
+			<Text>When starting or extending a [ICON_GOLDEN_AGE] Golden Age: {1_InstantYield}</Text>
 		</Row>
 		<Row Tag="TXT_KEY_PRODUCTION_BUILDING_UNIT_XP_ON_GOLDEN_AGE_START">
-			<Text>When starting a [ICON_GOLDEN_AGE] Golden Age: {2_Sign}{1_Num} XP for all future Units trained in this City, capped at {3_Num} XP</Text>
+			<Text>When starting or extending a [ICON_GOLDEN_AGE] Golden Age: {2_Sign}{1_Num} XP for all future Units trained in this City, capped at {3_Num} XP</Text>
 		</Row>
 		<Row Tag="TXT_KEY_PRODUCTION_BUILDING_INSTANT_YIELD_ON_WLTKD">
 			<Text>When this City starts a [ICON_HAPPINESS_1] "We Love the King Day": {1_InstantYield}</Text>
@@ -1325,7 +1376,7 @@
 			<Text>When killing an enemy [ICON_SPY] Spy: {1_InstantYield}</Text>
 		</Row>
 		<Row Tag="TXT_KEY_PRODUCTION_BUILDING_EXTRA_LUXURIES">
-			<Text>+100% Luxury Resources from Improved Tiles owned by this City</Text>
+			<Text>+1 copy of Luxury Resources from Improved Tiles owned by this City</Text>
 		</Row>
 		<Row Tag="TXT_KEY_PRODUCTION_BUILDING_REMOVE_OCCUPIED_UNHAPPINESS">
 			<Text>Removes [ICON_HAPPINESS_3] Unhappiness from [ICON_OCCUPIED] Occupation</Text>
@@ -1443,6 +1494,15 @@
 		</Row>
 		<Row Tag="TXT_KEY_PRODUCTION_BUILDING_INDUSTRIAL_CONNECTION">
 			<Text>City must have [ICON_INDUSTRIAL_CONNECTED] Industrial City Connection with [ICON_CAPITAL] Capital</Text>
+		</Row>
+		<Row Tag="TXT_KEY_PRODUCTION_BUILDING_PUPPET">
+			<Text>City must be a [ICON_PUPPET] Puppet</Text>
+		</Row>
+		<Row Tag="TXT_KEY_PRODUCTION_BUILDING_NUM_FRANCHISES">
+			<Text>Requires {1_Num} Global [ICON_FRANCHISE] Franchises</Text>
+		</Row>
+		<Row Tag="TXT_KEY_PRODUCTION_BUILDING_PERCENT_MONOPOLIES">
+			<Text>Requires control of {1_Num}% of possible Global [ICON_MONOPOLY] Monopolies</Text>
 		</Row>
 		<Row Tag="TXT_KEY_PRODUCTION_BUILDING_REQUIRED_BUILDINGS_GLOBAL">
 			<Text>Required Buildings in any City: [COLOR_YIELD_FOOD]{1_Buildings}[ENDCOLOR]</Text>
@@ -1691,7 +1751,19 @@
 			<Text>[ICON_BULLET]Any Trade Route passing through this City: {1_YieldBoosts}</Text>
 		</Row>
 		<Row Tag="TXT_KEY_PRODUCTION_BUILDING_YIELD_BOOST_FROM_GOLDEN_AGE_START">
-			<Text>[ICON_BULLET]Adding [ICON_GOLDEN_AGE] Golden Age Turns: {1_YieldBoosts} (capped at {2_YieldBoostCaps})</Text>
+			<Text>[ICON_BULLET]{1_YieldBoosts} per Turn for every [ICON_GOLDEN_AGE] Golden Age started or extended after the building has been built (capped at {2_YieldBoostCaps})</Text>
+		</Row>
+		<Row Tag="TXT_KEY_PRODUCTION_BUILDING_YIELD_MODIFIER_FROM_DISTANCE_TO_CAPITAL_INCREASING">
+			<Text>[ICON_BULLET]{1_YieldBoosts} for each tile away from the capital (maximum value: {2_YieldBoostCaps}%)</Text>
+		</Row>
+		<Row Tag="TXT_KEY_PRODUCTION_BUILDING_YIELD_MODIFIER_FROM_DISTANCE_TO_CAPITAL_DECREASING">
+			<Text>[ICON_BULLET]{1_YieldBoosts} for each tile away from the capital (minimum value: {2_YieldBoostCaps}%)</Text>
+		</Row>
+		<Row Tag="TXT_KEY_PRODUCTION_BUILDING_YIELD_MODIFIER_FROM_DISTANCE_TO_CAPITAL_INCREASING_WITH_BASE_VALUE">
+			<Text>[ICON_BULLET]{1_YieldBoostsBase}, plus {2_YieldBoosts}% for each tile away from the capital (maximum value: {3_YieldBoostCaps}%)</Text>
+		</Row>
+		<Row Tag="TXT_KEY_PRODUCTION_BUILDING_YIELD_MODIFIER_FROM_DISTANCE_TO_CAPITAL_DECREASING_WITH_BASE_VALUE">
+			<Text>[ICON_BULLET]{1_YieldBoostsBase}, minus {2_YieldBoosts}% for each tile away from the capital (minimum value: {3_YieldBoostCaps}%)</Text>
 		</Row>
 		<Row Tag="TXT_KEY_PRODUCTION_BUILDING_YIELD_BOOST_FROM_THEMES">
 			<Text>[ICON_BULLET]Each themed [ICON_GREAT_WORK] Great Work set in City: {1_YieldBoosts}</Text>
@@ -1861,6 +1933,9 @@
 		<Row Tag="TXT_KEY_YIELD_MOD_AREA">
 			<Text>[NEWLINE][ICON_BULLET]{1: number "'+'##;'-'##"}% from Area Bonus</Text>
 		</Row>
+		<Row Tag="TXT_KEY_YIELD_MOD_DISTANCE_CAPITAL">
+			<Text>[NEWLINE][ICON_BULLET]{1: number "'+'##;'-'##"}% from Distance to Capital</Text>
+		</Row>
 		<Row Tag="TXT_KEY_YIELD_MOD_BELIEF">
 			<Text>[NEWLINE][ICON_BULLET]{1: number "'+'##;'-'##"}% from [ICON_RELIGION] Religious Beliefs</Text>
 		</Row>
@@ -1869,9 +1944,6 @@
 		</Row>
 		<Row Tag="TXT_KEY_YIELD_MOD_CAPITAL">
 			<Text>[NEWLINE][ICON_BULLET]{1: number "'+'##;'-'##"}% for [ICON_CAPITAL] Capital from Policies</Text>
-		</Row>
-		<Row Tag="TXT_KEY_YIELD_MOD_CONQUEST">
-			<Text>[NEWLINE][ICON_BULLET]{1: number "'+'##;'-'##"}% from City Conquest ({2_Num} {2: plural 1?Turn; other?Turns;} remaining)</Text>
 		</Row>
 		<Row Tag="TXT_KEY_YIELD_MOD_CORPORATION">
 			<Text>[NEWLINE][ICON_BULLET]{1: number "'+'##;'-'##"}% from [ICON_INTERNATIONAL_TRADE] Trade Routes with [ICON_FRANCHISE] Established Franchise</Text>
@@ -2097,7 +2169,7 @@
 		<Row Tag="TXT_KEY_PRODMOD_UNIT_CORPORATION">
 			<Text>[NEWLINE][ICON_BULLET]Modifier for Unit from Corporation: {1_Num}%</Text>
 		</Row>
-		<Row Tag="TXT_KEY_PRODMOD_CONQUEST_BUILDINGS_PRIOR_ERAS">
+		<Row Tag="TXT_KEY_PRODMOD_BUILDINGS_PRIOR_ERAS">
 			<Text>[NEWLINE][ICON_BULLET]Modifier for Past Era Buildings: {1_Num}%</Text>
 		</Row>
 		<Row Tag="TXT_KEY_PRODMOD_WONDER_UNITPROMOTION">
@@ -2118,6 +2190,9 @@
 		<Row Tag="TXT_KEY_PRODMOD_WONDER_TO_BUILDING_FROM_POLICY_TRAIT">
 			<Text>[NEWLINE][ICON_BULLET]Trait Wonder Production Modifier for Buildings from Policies: {1_Num}%</Text>
 		</Row>
+		<Row Tag="TXT_KEY_PRODMOD_WONDER_TO_BUILDING_FROM_RELIGION_TRAIT">
+			<Text>[NEWLINE][ICON_BULLET]Trait Wonder Production Modifier for Buildings from Religion: {1_Num}%</Text>
+		</Row>
 		<Row Tag="TXT_KEY_PRODMOD_WONDER_TO_BUILDING_FROM_RESOURCE_TRAIT">
 			<Text>[NEWLINE][ICON_BULLET]Trait Wonder Production Modifier for Buildings from Resources: {1_Num}%</Text>
 		</Row>
@@ -2126,6 +2201,9 @@
 		</Row>
 		<Row Tag="TXT_KEY_PRODMOD_WONDER_TO_BUILDING_FROM_CITY_TRAIT">
 			<Text>[NEWLINE][ICON_BULLET]Trait Wonder Production Modifier for Buildings from City: {1_Num}%</Text>
+		</Row>
+		<Row Tag="TXT_KEY_PRODMOD_CONQUEST">
+			<Text>[NEWLINE][ICON_BULLET]Modifier from Recent City Conquest: {1: number "'+'##;'-'##"}% ({2_Num} {2: plural 1?Turn; other?Turns;} remaining)</Text>
 		</Row>
 		<Row Tag="TXT_KEY_SCIENCE_YIELD_FROM_LEAGUE_ART">
 			<Text>{1_Num} [ICON_RESEARCH] added by [ICON_GREAT_WORK] Great Works</Text>
@@ -2143,7 +2221,7 @@
 			<Text>({1_Pressure} Pressure, +{2_PressurePerTurn} per Turn)</Text>
 		</Row>
 		<Row Tag="TXT_KEY_RELIGION_TOOLTIP_EXTENDED">
-			<Text>{1_ReligionIcon} {2_NumFollowers} {2_NumFollowers: plural 1?Follower; other?Followers;} ({3_TotalPressure} + {4_PressurePerTurn} Pressure from {5_Num} {5_Num:plural 1?Source City; other?Source Cities;})</Text>
+			<Text>{1_ReligionIcon} {2_NumFollowers} {2_NumFollowers: plural 1?Follower; other?Followers;} ({3_TotalPressure} + {4_PressurePerTurn} Pressure; {5_Num} {5_Num:plural 1?Source City; other?Source Cities;})</Text>
 		</Row>
 		<Row Tag="TXT_KEY_NO_ACTION_NO_SUPPLY">
 			<Text>[NEWLINE]Cannot [ICON_PRODUCTION] Train this unit, as you are at your maximum Supply cap!</Text>
@@ -3542,6 +3620,63 @@
 			<Text>No Capital City</Text>
 		</Row>
 		<!-- Quests -->
+		<Row Tag="TXT_KEY_CITY_STATE_QUEST_WAR_FORMAL">
+			<Text>They want you to declare war on {1_TargetName:textkey}.</Text>
+		</Row>
+		<Row Tag="TXT_KEY_CITY_STATE_QUEST_CONSTRUCT_NATIONAL_WONDER_FORMAL">
+			<Text>They want you to build the {1_NationalWonderName:textkey}.</Text>
+		</Row>
+		<Row Tag="TXT_KEY_CITY_STATE_QUEST_GIFT_SPECIFIC_UNIT_FORMAL">
+			<Text>They want you to send them {TXT_KEY_GRAMMAR_A_AN &lt;&lt; {1_UnitName}} with at least {2_XP} XP.</Text>
+		</Row>
+		<Row Tag="TXT_KEY_CITY_STATE_QUEST_FIND_CITY_STATE_FORMAL">
+			<Text>They want you to find the City-State of {1_CityStateName:textkey}.</Text>
+		</Row>
+		<Row Tag="TXT_KEY_CITY_STATE_QUEST_INFLUENCE_FORMAL">
+			<Text>Diplomatic Missions are temporarily more effective.</Text>
+		</Row>
+		<Row Tag="TXT_KEY_CITY_STATE_QUEST_INFLUENCE_TOURISM_FORMAL">
+			<Text>They will reward the player with the highest [ICON_TOURISM] Tourism per turn.</Text>
+		</Row>
+		<Row Tag="TXT_KEY_CITY_STATE_QUEST_CONTEST_TOURISM_WINNING_FORMAL">
+			<Text>{TXT_KEY_CITY_STATE_QUEST_INFLUENCE_TOURISM_FORMAL} So far, you have the lead with [ICON_TOURISM] [COLOR_POSITIVE_TEXT]{1_PlayerScore} per turn[ENDCOLOR].</Text>
+		</Row>
+		<Row Tag="TXT_KEY_CITY_STATE_QUEST_CONTEST_TOURISM_LOSING_FORMAL">
+			<Text>{TXT_KEY_CITY_STATE_QUEST_INFLUENCE_TOURISM_FORMAL} So far, the leader has [ICON_TOURISM] {1_LeaderScore} per turn and you have [ICON_TOURISM] [COLOR_POSITIVE_TEXT]{2_PlayerScore} per turn[ENDCOLOR].</Text>
+		</Row>
+		<Row Tag="TXT_KEY_CITY_STATE_QUEST_CONTEST_ARTSY_UNITS_FORMAL">
+			<Text>They will reward the player who expends the most [ICON_GREAT_PEOPLE] Great Artists, Great Writers, Great Musicians, and Archaeologists.</Text>
+		</Row>
+		<Row Tag="TXT_KEY_CITY_STATE_QUEST_CONTEST_ARTSY_UNITS_WINNING_FORMAL">
+			<Text>{TXT_KEY_CITY_STATE_QUEST_CONTEST_ARTSY_UNITS_FORMAL} So far, you have the lead with [ICON_GREAT_PEOPLE][COLOR_POSITIVE_TEXT]{1_PlayerScore}[ENDCOLOR].</Text>
+		</Row>
+		<Row Tag="TXT_KEY_CITY_STATE_QUEST_CONTEST_ARTSY_UNITS_LOSING_FORMAL">
+			<Text>{TXT_KEY_CITY_STATE_QUEST_CONTEST_ARTSY_UNITS_FORMAL} So far, the leader has [ICON_GREAT_PEOPLE]{1_LeaderScore} and you have [ICON_GREAT_PEOPLE][COLOR_POSITIVE_TEXT]{2_PlayerScore}[ENDCOLOR].</Text>
+		</Row>
+		<Row Tag="TXT_KEY_CITY_STATE_QUEST_CONTEST_SCIENCEY_UNITS_FORMAL">
+			<Text>They will reward the player who expends the most [ICON_GREAT_PEOPLE] Great Scientists, Great Merchants, and Great Engineers.</Text>
+		</Row>
+		<Row Tag="TXT_KEY_CITY_STATE_QUEST_CONTEST_SCIENCEY_UNITS_WINNING_FORMAL">
+			<Text>{TXT_KEY_CITY_STATE_QUEST_CONTEST_SCIENCEY_UNITS_FORMAL} So far, you have the lead with [ICON_GREAT_PEOPLE][COLOR_POSITIVE_TEXT]{1_PlayerScore}[ENDCOLOR].</Text>
+		</Row>
+		<Row Tag="TXT_KEY_CITY_STATE_QUEST_CONTEST_SCIENCEY_UNITS_LOSING_FORMAL">
+			<Text>{TXT_KEY_CITY_STATE_QUEST_CONTEST_SCIENCEY_UNITS_FORMAL} So far, the leader has [ICON_GREAT_PEOPLE]{1_LeaderScore} and you have [ICON_GREAT_PEOPLE][COLOR_POSITIVE_TEXT]{2_PlayerScore}[ENDCOLOR].</Text>
+		</Row>
+		<Row Tag="TXT_KEY_CITY_STATE_QUEST_ARCHAEOLOGY_FORMAL">
+			<Text>Send an archaeologist to a site near this city-state.</Text>
+		</Row>
+		<Row Tag="TXT_KEY_CITY_STATE_QUEST_CIRCUMNAVIGATION_FORMAL">
+			<Text>Be the first to circumnavigate the world.</Text>
+		</Row>
+		<Row Tag="TXT_KEY_CITY_STATE_QUEST_LIBERATION_FORMAL">
+			<Text>They want you to liberate the city of {1_CityName:textkey}.</Text>
+		</Row>
+		<Row Tag="TXT_KEY_CITY_STATE_QUEST_HORDE_FORMAL">
+			<Text>Protect them from a barbarian horde! If there are barbarians next to the city when the quest ends, the city will be [COLOR_NEGATIVE_TEXT]sacked[ENDCOLOR]!</Text>
+		</Row>
+		<Row Tag="TXT_KEY_CITY_STATE_QUEST_REBELLION_FORMAL">
+			<Text>A revolution against their ally is occurring!</Text>
+		</Row>
 		<Row Tag="TXT_KEY_CITY_STATE_QUEST_FIND_CITY_FORMAL">
 			<Text>They want you to find the city of {@1_CityName}.</Text>
 		</Row>
@@ -3550,6 +3685,9 @@
 		</Row>
 		<Row Tag="TXT_KEY_CITY_STATE_QUEST_BUILD_X_BUILDINGS_FORMAL">
 			<Text>Construct [COLOR_POSITIVE_TEXT]{2_Num}[ENDCOLOR] {@1_Building} {2_Num: plural 1?building; other?buildings;} in non-puppet cities in your empire.</Text>
+		</Row>
+		<Row Tag="TXT_KEY_CITY_STATE_QUEST_SPY_MISSION_FORMAL">
+			<Text>Conduct the [COLOR_POSITIVE_TEXT]{@1_SpyMission}[ENDCOLOR] Spy Mission against any civilization.</Text>
 		</Row>
 		<Row Tag="TXT_KEY_CITY_STATE_QUEST_SPY_ON_MAJOR_FORMAL">
 			<Text>Conduct a Spy Mission against {1_Civ}.</Text>

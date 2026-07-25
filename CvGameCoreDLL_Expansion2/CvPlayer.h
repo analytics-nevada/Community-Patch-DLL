@@ -777,6 +777,8 @@ public:
 	void ChangeStartingSpyRank(int iChange);
 	int GetSpyPoints(bool bTotal) const;
 	void CreateSpies(int iNumSpies, bool bScaling = true);
+	int GetSpyIdentificationChance(int iBaseChance);
+	int GetSpyKillChance(int iBaseChance);
 	// END Espionage
 
 	int GetConversionModifier() const;
@@ -1323,6 +1325,9 @@ public:
 
 	bool IsBorderSettle() const;
 	void SetBorderSettle(int iValue);
+
+	int GetGreatMerchantExtraLuxuries() const;
+	void ChangeGreatMerchantExtraLuxuries(int iChange);
 
 	bool IsOnlyTradeSameIdeology() const;
 	void ChangeOnlyTradeSameIdeology(int iChange);
@@ -1878,9 +1883,9 @@ public:
 	int GetCityStateCombatModifier() const;
 	void changeCityStateCombatModifier(int iChange);
 
-	int GetHappinessPerXPopulationGlobal() const;
-	void SetHappinessPerXPopulationGlobal(int iValue);
-	void ChangeHappinessPerXPopulationGlobal(int iChange);
+	fraction GetHappinessPerXPopulationGlobal() const;
+	void SetHappinessPerXPopulationGlobal(fraction fValue);
+	void ChangeHappinessPerXPopulationGlobal(fraction fChange);
 
 	int GetIdeologyPoint() const;
 	void SetIdeologyPoint(int iValue);
@@ -1940,6 +1945,9 @@ public:
 
 	int GetConquestPerEraBuildingProductionMod() const;
 	void changeConquestPerEraBuildingProductionMod(int iChange);
+
+	int GetPerPastEraBuildingProductionMod() const;
+	void ChangePerPastEraBuildingProductionMod(int iChange);
 
 	int GetAdmiralLuxuryBonus() const;
 	void changeAdmiralLuxuryBonus(int iChange);
@@ -2066,6 +2074,7 @@ public:
 
 	bool HasGlobalMonopoly(ResourceTypes eResource) const;
 	void SetHasGlobalMonopoly(ResourceTypes eResource, bool bNewValue);
+	int GetPercentGlobalMonopolies() const;
 	bool HasStrategicMonopoly(ResourceTypes eResource) const;
 	void SetHasStrategicMonopoly(ResourceTypes eResource, bool bNewValue);
 	void CheckForMonopoly(ResourceTypes eResource);
@@ -2397,6 +2406,9 @@ public:
 	void changeInstantYieldValue(YieldTypes eYield, int iValue);
 
 	void LogInstantYield(YieldTypes eYield, int iValue, InstantYieldType eInstantYield, CvCity* pCity);
+	void LogBuildingInstantYields(InstantYieldType iType, CvCity* pLoopCity, YieldTypes eYield, int iEra, int iPassYield, bool bEraScale, PlayerTypes ePlayer, YieldTypes ePassYield, BuildingTypes ePassBuilding, CvCity* pCity, bool bInternational, CvUnit* pUnit, GreatPersonTypes eGreatPerson);
+	void LogReligionBeliefInstantYields(InstantYieldType iType, CvCity* pLoopCity, YieldTypes eYield, int iEra, int iPassYield, bool bEraScale, YieldTypes ePassYield, GreatPersonTypes eGreatPerson, CvUnit* pUnit, CvPlot* pPlot, PlayerTypes eSpreadPlayer, const CvReligion* pReligion, ReligionTypes eReligion, int iNumFollowerCities, int iNumFollowers);
+	void LogHandicapYields(CvHandicapInfo* pHandicapInfo, HistoricEventTypes eHistoricEvent, int iEra, int iDifficultyBonusPercent, bool bSeparateYieldTypes, int iCommonAmount, const std::vector<YieldTypes>& vYields);
 
 	CvString getInstantYieldHistoryTooltip(int iGameTurn, int iNumPreviousTurnsToCount);
 
@@ -2535,6 +2547,11 @@ public:
 
 	int GetUnitSupplyFromExpendedGreatPeople() const;
 	void ChangeUnitSupplyFromExpendedGreatPeople(int iChange);
+
+	int GetNumExpendedArtsyUnits() const;
+	void ChangeNumExpendedArtsyUnits(int iChange);
+	int GetNumExpendedScienceyUnits() const;
+	void ChangeNumExpendedScienceyUnits(int iChange);
 
 	int GetAvgUnitExp100() const;
 
@@ -3010,7 +3027,7 @@ protected:
 	int m_iHappinessPerGarrisonedUnitCount;
 	int m_iHappinessPerTradeRouteCount;
 	int m_iHappinessPerXPopulation;
-	int m_iHappinessPerXPopulationGlobal;
+	fraction m_fHappinessPerXPopulationGlobal;
 	int m_iIdeologyPoint;
 	int m_iNoXPLossUnitPurchase;
 	int m_iXCSAlliesLowersPolicyNeedWonders;
@@ -3186,6 +3203,7 @@ protected:
 	int m_iHappinessPerActiveTradeRoute;
 	int m_iCSResourcesCountMonopolies;
 	int m_iConquestPerEraBuildingProductionMod;
+	int m_iPerPastEraBuildingProductionMod;
 	int m_iAdmiralLuxuryBonus;
 	int m_iPuppetYieldAndSupplyModifierChange;
 	int m_iNeedsModifierFromAirUnits;
@@ -3258,6 +3276,7 @@ protected:
 	int m_iMinorResourceBonusCount;
 	int m_iAbleToAnnexCityStatesCount;
 	int m_iBorderSettle;
+	int m_iGreatMerchantExtraLuxuries;
 	int m_iOnlyTradeSameIdeology;
 	int m_iSupplyFreeUnits; //military units which don't count against the supply limit
 	std::vector<CvString> m_aistrInstantYield; // not serialized
@@ -3323,6 +3342,8 @@ protected:
 	int m_iExtraSupplyFlat;
 	int m_iCitySupplyFlatGlobal;
 	int m_iUnitSupplyFromExpendedGP;
+	int m_iExpendedArtsyUnits;
+	int m_iExpendedScienceyUnits;
 	int m_iMissionaryExtraStrength;
 	int m_iFreeSpecialist;
 	int m_iCultureBombTimer;
@@ -3833,7 +3854,7 @@ SYNC_ARCHIVE_VAR(int, m_iCityRevoltCounter)
 SYNC_ARCHIVE_VAR(int, m_iHappinessPerGarrisonedUnitCount)
 SYNC_ARCHIVE_VAR(int, m_iHappinessPerTradeRouteCount)
 SYNC_ARCHIVE_VAR(int, m_iHappinessPerXPopulation)
-SYNC_ARCHIVE_VAR(int, m_iHappinessPerXPopulationGlobal)
+SYNC_ARCHIVE_VAR(fraction, m_fHappinessPerXPopulationGlobal)
 SYNC_ARCHIVE_VAR(int, m_iIdeologyPoint)
 SYNC_ARCHIVE_VAR(int, m_iNoXPLossUnitPurchase)
 SYNC_ARCHIVE_VAR(int, m_iXCSAlliesLowersPolicyNeedWonders)
@@ -3994,6 +4015,7 @@ SYNC_ARCHIVE_VAR(int, m_iMissionInfluenceModifier)
 SYNC_ARCHIVE_VAR(int, m_iHappinessPerActiveTradeRoute)
 SYNC_ARCHIVE_VAR(int, m_iCSResourcesCountMonopolies)
 SYNC_ARCHIVE_VAR(int, m_iConquestPerEraBuildingProductionMod)
+SYNC_ARCHIVE_VAR(int, m_iPerPastEraBuildingProductionMod)
 SYNC_ARCHIVE_VAR(int, m_iAdmiralLuxuryBonus)
 SYNC_ARCHIVE_VAR(int, m_iPuppetYieldAndSupplyModifierChange)
 SYNC_ARCHIVE_VAR(int, m_iNeedsModifierFromAirUnits)
@@ -4064,6 +4086,7 @@ SYNC_ARCHIVE_VAR(int, m_iMinorScienceAlliesCount)
 SYNC_ARCHIVE_VAR(int, m_iMinorResourceBonusCount)
 SYNC_ARCHIVE_VAR(int, m_iAbleToAnnexCityStatesCount)
 SYNC_ARCHIVE_VAR(int, m_iBorderSettle)
+SYNC_ARCHIVE_VAR(int, m_iGreatMerchantExtraLuxuries)
 SYNC_ARCHIVE_VAR(int, m_iOnlyTradeSameIdeology)
 SYNC_ARCHIVE_VAR(int, m_iSupplyFreeUnits)
 SYNC_ARCHIVE_VAR(std::vector<bool>, m_abActiveContract)
@@ -4123,6 +4146,8 @@ SYNC_ARCHIVE_VAR(int, m_iExtraSupplyPerPopulation)
 SYNC_ARCHIVE_VAR(int, m_iExtraSupplyFlat)
 SYNC_ARCHIVE_VAR(int, m_iCitySupplyFlatGlobal)
 SYNC_ARCHIVE_VAR(int, m_iUnitSupplyFromExpendedGP)
+SYNC_ARCHIVE_VAR(int, m_iExpendedArtsyUnits)
+SYNC_ARCHIVE_VAR(int, m_iExpendedScienceyUnits)
 SYNC_ARCHIVE_VAR(int, m_iMissionaryExtraStrength)
 SYNC_ARCHIVE_VAR(int, m_iFreeSpecialist)
 SYNC_ARCHIVE_VAR(int, m_iCultureBombTimer)

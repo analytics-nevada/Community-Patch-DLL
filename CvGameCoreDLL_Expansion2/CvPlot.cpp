@@ -7901,15 +7901,12 @@ int CvPlot::getNumResourceForPlayer(PlayerTypes ePlayer, bool bExtraResources, b
 			{
 				if (bExtraResources)
 				{
-					if (pkResource->getResourceUsage() == RESOURCEUSAGE_LUXURY)
+					CvCity* pCity = getOwningCity();
+					if (pCity)
 					{
-						CvCity* pCity = getOwningCity();
-						if (pCity)
+						if (pCity->GetExtraResources(eResource) > 0)
 						{
-							if (pCity->IsExtraLuxuryResources())
-							{
-								return 1;
-							}
+							return pCity->GetExtraResources(eResource);
 						}
 					}
 					return 0;
@@ -8292,11 +8289,13 @@ void CvPlot::setImprovementType(ImprovementTypes eNewValue, PlayerTypes eBuilder
 			//must be false now
 			SetImprovementPassable(false);
 			//displace units which cannot stay here any longer (question: what if we replace one passable improvement with another? that let's ignore that case)
-			for (int i = 0; i < getNumUnits(); i++)
+			// iterate backwards: jumpToNearestValidPlotWithinRange removes the unit from this plot, shrinking the list;
+			// backwards iteration ensures we never skip a unit or read past the end.
+			for (int i = getNumUnits() - 1; i >= 0; i--)
 			{
 				CvUnit* pPotentiallyDisplaced = getUnitByIndex(i);
 				//do not push around zombie units
-				if (!pPotentiallyDisplaced->isDelayedDeath())
+				if (pPotentiallyDisplaced && !pPotentiallyDisplaced->isDelayedDeath())
 					pPotentiallyDisplaced->jumpToNearestValidPlotWithinRange(1);
 			}
 
@@ -13792,7 +13791,7 @@ void CvPlot::Serialize(Plot& plot, Visitor& visitor)
 		visitor(plot.m_aeHumanPlannedRouteState[i]);
 	}
 
-	visitor(plot.m_bfRevealed.m_bits);
+	visitor(plot.m_bfRevealed);
 	visitor(plot.m_cRiverCrossing);
 
 	// Script data
@@ -14232,13 +14231,15 @@ int CvPlot::getYieldWithBuild(BuildTypes eBuild, YieldTypes eYield, bool bWithUp
 		}
 
 		iYield += calculateImprovementYield(eYield, ePlayer, eNewImprovement, eNewRoute, eFeature, eResource, eForceCityConnection, pOwningCity, false) + calculateReligionImprovementYield(eYield, ePlayer, eNewImprovement, eResource, pOwningCity, pMajorityReligion, pSecondaryPantheon);
-		if (MOD_BALANCE_PERMANENT_PANTHEONS && pPlayerPantheon != NULL)
-		{
-			iYield += calculateReligionImprovementYield(eYield, ePlayer, eNewImprovement, eResource, pOwningCity, pPlayerPantheon, NULL);
-		}
 	}
 
 	iYield += calculatePlayerYield(eYield, iYield, ePlayer, eNewImprovement, eFeature, eResource, eForceCityConnection, pOwningCity, pMajorityReligion, pSecondaryPantheon, pPlayerPantheon, false);
+
+	if (MOD_BALANCE_PERMANENT_PANTHEONS && pPlayerPantheon != NULL)
+	{
+		iYield += calculateReligionImprovementYield(eYield, ePlayer, eNewImprovement, eResource, pOwningCity, pPlayerPantheon, NULL);
+		iYield += calculateReligionNatureYield(eYield, ePlayer, eNewImprovement, eFeature, eResource, pOwningCity, pPlayerPantheon, NULL);
+	}
 
 	//no overhead if empty
 	for (size_t i=0; i<m_vExtraYields.size(); i++)

@@ -427,7 +427,7 @@ function AddSmallButtonsToTechButton(buttonStack, kTechInfo, iButtonCount, iText
 		end
 	end
 
-	for kProjectInfo in GameInfo.Projects{TechPrereq = kTechInfo.Type} do
+	for kProjectInfo in GameInfo.Projects{TechPrereq = kTechInfo.Type, ShowInTechTree = 1} do
 		if not kProjectInfo.CivilizationType or kProjectInfo.CivilizationType == strCivType then
 			GenerateNextButtonFromInfo(SetupProjectButton, kProjectInfo);
 			if iButtonIndex > iButtonCount then return iButtonCount end
@@ -637,6 +637,11 @@ function AddSmallButtonsToTechButton(buttonStack, kTechInfo, iButtonCount, iText
 		local kPromotionInfo = GameInfo.UnitPromotions[row.PromotionType];
 		local strTooltip = L("TXT_KEY_FREE_PROMOTION_FROM_TECH", kPromotionInfo.Description, kPromotionInfo.Help);
 		GenerateNextButtonFromInfo(SetupGenericButton, kPromotionInfo, strTooltip);
+		if iButtonIndex > iButtonCount then return iButtonCount end
+	end
+
+	if kTechInfo.MiscButtonText then
+		GenerateNextButtonCustom(L(kTechInfo.MiscButtonText));
 		if iButtonIndex > iButtonCount then return iButtonCount end
 	end
 

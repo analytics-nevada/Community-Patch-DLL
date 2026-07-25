@@ -234,6 +234,7 @@ public:
 	bool IsEnablesSSPartPurchase() const;
 	bool IsAbleToAnnexCityStates() const;
 	bool IsBorderSettle() const;
+	int GetGreatMerchantExtraLuxuries() const;
 	std::string pyGetWeLoveTheKing()
 	{
 		return GetWeLoveTheKing();
@@ -426,6 +427,7 @@ public:
 	int GetFlatDefenseFromAirUnits() const;
 	int GetPuppetYieldAndSupplyModifierChange() const;
 	int GetConquestPerEraBuildingProductionMod() const;
+	int GetPerPastEraBuildingProductionMod() const;
 	int GetAdmiralLuxuryBonus() const;
 
 #if defined(HH_MOD_API_TRADEROUTE_MODIFIERS)
@@ -656,6 +658,7 @@ private:
 	bool m_bEnablesSSPartPurchase;
 	bool m_bAbleToAnnexCityStates;
 	bool m_bBorderSettle;
+	int m_iGreatMerchantExtraLuxuries;
 
 	bool m_bIsOnlyTradeSameIdeology;
 	bool m_bOneShot;
@@ -857,6 +860,7 @@ private:
 	int m_iFlatDefenseFromAirUnits;
 	int m_iPuppetYieldAndSupplyModifierChange;
 	int m_iConquestPerEraBuildingProductionMod;
+	int m_iPerPastEraBuildingProductionMod;
 	int m_iAdmiralLuxuryBonus;
 #if defined(HH_MOD_API_TRADEROUTE_MODIFIERS)
 	int* m_piInternationalRouteYieldModifiers;
@@ -1079,7 +1083,11 @@ public:
 	int GetTourismFromUnitCreation(UnitClassTypes eUnitClass) const;
 
 	// Functions to give current player status with respect to policies
-	int GetNextPolicyCost();
+	int GetPolicyCityModifierTimes100(int iCityOffset = 0) const;
+	int GetPolicyOneMoreCityModifierTimes100(int iCityOffset = 0) const;
+	int GetIdeologyTenetPolicyCostPenaltyByLevel(int iLevel) const;
+	int GetIdeologyTenetPolicyCostPenalty(int* pTenetsAdopted = NULL) const;
+	int GetNextPolicyCost(bool bIgnoreCities = false, int iCityOffset = 0, int* pCostBeforePolicyDiscount = NULL);
 	bool CanAdoptPolicy(PolicyTypes eIndex, bool bIgnoreCost = false) const;
 	int GetNumPoliciesCanBeAdopted();
 

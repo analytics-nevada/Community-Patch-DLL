@@ -3165,7 +3165,7 @@ int CvDiplomacyAI::GetDiplomaticVictoryProgress() const
 			CvLeagueSpecialSessionEntry* pSessionInfo = GC.getLeagueSpecialSessionInfo(e);
 			if (pSessionInfo->IsUnitedNations() && pSessionInfo->GetResolutionTrigger() != NO_RESOLUTION)
 			{
-				if (LeagueHelpers::IsResolutionForTriggerActive(pSessionInfo->GetResolutionTrigger()))
+				if (pLeague->IsResolutionForTriggerActive(pSessionInfo->GetResolutionTrigger()))
 				{
 					iExtra += 1;
 				}
@@ -22106,21 +22106,10 @@ void CvDiplomacyAI::DoRelationshipPairing()
 		// Are we going for diplo victory? Check minor civ dispute.
 		if (bGoingForDiploVictory || bCloseToDiploVictory)
 		{
-			if (bCloseToDiploVictory)
+			if (IsMinorCivTroublemaker(eLoopPlayer, bCloseToDiploVictory))
 			{
-				if (IsMinorCivTroublemaker(eLoopPlayer, true))
-				{
-					SetStrategicTradePartner(eLoopPlayer, false);
-					continue;
-				}
-			}
-			else
-			{
-				if (IsMinorCivTroublemaker(eLoopPlayer, false))
-				{
-					SetStrategicTradePartner(eLoopPlayer, false);
-					continue;
-				}
+				SetStrategicTradePartner(eLoopPlayer, false);
+				continue;
 			}
 		}
 
@@ -24602,7 +24591,7 @@ void CvDiplomacyAI::SelectBestApproachTowardsMinorCiv(PlayerTypes ePlayer)
 	}
 
 	// Check for kill CS quests
-	if ((!MOD_BALANCE_QUEST_CHANGES && GET_PLAYER(ePlayer).GetMinorCivAI()->IsEnabledQuest(MINOR_CIV_QUEST_KILL_CITY_STATE)) || (MOD_BALANCE_QUEST_CHANGES && GET_PLAYER(ePlayer).GetMinorCivAI()->IsActiveQuestForPlayer(eMyPlayer, MINOR_CIV_QUEST_KILL_CITY_STATE)))
+	if ((!MOD_BALANCE_QUEST_CHANGES && GET_PLAYER(ePlayer).GetMinorCivAI()->IsEnabledQuest(MINOR_CIV_QUEST_KILL_CITY_STATE, GetPlayer()->GetCurrentEra())) || (MOD_BALANCE_QUEST_CHANGES && GET_PLAYER(ePlayer).GetMinorCivAI()->IsActiveQuestForPlayer(eMyPlayer, MINOR_CIV_QUEST_KILL_CITY_STATE)))
 	{
 		for (int iMinorCivLoop = MAX_MAJOR_CIVS; iMinorCivLoop < MAX_CIV_PLAYERS; iMinorCivLoop++)
 		{
@@ -30390,6 +30379,9 @@ void CvDiplomacyAI::DoRequest(PlayerTypes ePlayer, DiploStatementTypes& eStateme
 	if (SkipForTeammates())
 		return;
 
+	if (IsAvoidDeals())
+		return;
+
 	if (MOD_DIPLOAI_SHUT_UP_HELP_REQUESTS && GET_PLAYER(ePlayer).isHuman(ISHUMAN_AI_DIPLOMACY))
 		return;
 
@@ -30900,7 +30892,7 @@ void CvDiplomacyAI::DoGenerousOffer(PlayerTypes ePlayer, DiploStatementTypes& eS
 	if (IsAvoidDeals())
 		return;
 
-	if (MOD_DIPLOAI_SHUT_UP_TRADE_OFFERS && GET_PLAYER(ePlayer).isHuman(ISHUMAN_AI_DIPLOMACY))
+	if (MOD_DIPLOAI_SHUT_UP_GIFT_OFFERS && GET_PLAYER(ePlayer).isHuman(ISHUMAN_AI_DIPLOMACY))
 		return;
 
 	// Check if we have a bonus on exporting luxuries
@@ -36904,50 +36896,6 @@ void CvDiplomacyAI::DoMakeDemand(PlayerTypes ePlayer)
 
 	// Clear out the deal if we don't want to offer it so that it's not tainted for the next trade possibility we look at
 	pDeal->ClearItems();
-}
-
-/// Possible Contact Statement - Gift
-void CvDiplomacyAI::DoGift(PlayerTypes ePlayer, DiploStatementTypes& eStatement, CvDeal* pDeal)
-{
-	PRECONDITION(ePlayer >= 0, "DIPLOMACY_AI: Invalid Player Index.");
-	PRECONDITION(ePlayer < MAX_MAJOR_CIVS, "DIPLOMACY_AI: Invalid Player Index.");
-
-	if (IsAvoidDeals())
-		return;
-
-	if (MOD_DIPLOAI_SHUT_UP_GIFT_OFFERS && GET_PLAYER(ePlayer).isHuman(ISHUMAN_AI_DIPLOMACY))
-		return;
-
-	if(eStatement == NO_DIPLO_STATEMENT_TYPE)
-	{
-		DiploStatementTypes eTempStatement = DIPLO_STATEMENT_GIFT;
-
-		// If a request was accepted or rejected, wait 60 turns. If we rolled for rand and failed, wait 15 turns before we try again
-		if(GetNumTurnsSinceStatementSent(ePlayer, eTempStatement) >= 60 &&
-		        GetNumTurnsSinceStatementSent(ePlayer, DIPLO_STATEMENT_GIFT_RANDFAILED) >= 15)
-		{
-			bool bRandPassed = false;	// This is used to see if we WOULD have made a gift, but the rand roll failed (so add an entry to the log)
-			bool bMakeGift = false;//IsMakeGift(ePlayer, pDeal, bRandPassed);
-
-			// Want to make a request of ePlayer? Pass pDeal in to see if there's actually anything we want
-			if(bMakeGift)
-			{
-				eStatement = eTempStatement;
-				pDeal->SetRequestingPlayer(GetID());
-			}
-
-			// Clear out the deal if we don't want to offer it so that it's not tainted for the next trade possibility we look at
-			else
-				pDeal->ClearItems();
-
-			// Add this statement to the log so we don't evaluate it again until 15 turns has come back around
-			if(!bRandPassed)
-			{
-				SetTurnStatementLastSent(ePlayer, DIPLO_STATEMENT_GIFT_RANDFAILED, GC.getGame().getGameTurn());
-				pDeal->ClearItems();
-			}
-		}
-	}
 }
 
 /////////////////////////////////////////////////////////
@@ -52806,6 +52754,12 @@ void CvDiplomacyAI::LogMinorCivQuestType(CvString& strString, MinorCivQuestTypes
 	case MINOR_CIV_QUEST_CONTEST_TOURISM:
 		strTemp.Format("Contest Tourism");
 		break;
+	case MINOR_CIV_QUEST_CONTEST_ARTSY_UNITS:
+		strTemp.Format("Contest Artsy Units");
+		break;
+	case MINOR_CIV_QUEST_CONTEST_SCIENCEY_UNITS:
+		strTemp.Format("Contest Sciencey Units");
+		break;
 	case MINOR_CIV_QUEST_ARCHAEOLOGY:
 		strTemp.Format("Archaeology");
 		break;
@@ -52826,6 +52780,9 @@ void CvDiplomacyAI::LogMinorCivQuestType(CvString& strString, MinorCivQuestTypes
 		break;
 	case MINOR_CIV_QUEST_BUILD_X_BUILDINGS:
 		strTemp.Format("Build X Buildings");
+		break;
+	case MINOR_CIV_QUEST_SPY_MISSION:
+		strTemp.Format("Spy Mission");
 		break;
 	case MINOR_CIV_QUEST_SPY_ON_MAJOR:
 		strTemp.Format("Spy On Major");
@@ -55955,7 +55912,7 @@ bool CvDiplomacyAI::IsWantToLiberateVassal(PlayerTypes ePlayer, int& iScoreForLi
 	iScoreForLiberate *= 100 + (GET_TEAM(eVassalTeam).GetNumTurnsIsVassal() * GC.getGame().getGameSpeedInfo().getTrainPercent() / 1000); // 1% per 10 turns (standard speed)
 	iScoreForLiberate /= 100;
 
-	return iScoreForLiberate > /*100*/ GD_INT_GET(VASSALAGE_LIBERATE_BASE_THRESHOLD);
+	return iScoreForLiberate > /*100*/ GD_INT_GET(VASSALAGE_LIBERATION_BASE_THRESHOLD);
 }
 
 /// Do we want to become the vassal of ePlayer?
@@ -56262,7 +56219,7 @@ bool CvDiplomacyAI::IsCapitulationAcceptable(PlayerTypes ePlayer)
 		iCapitulationScore += min(30, 10 * (iTheirCivs - iOurCivs));
 	}
 
-	return iCapitulationScore > /*100*/ GD_INT_GET(VASSALAGE_CAPITULATE_BASE_THRESHOLD);
+	return iCapitulationScore > /*100*/ GD_INT_GET(VASSALAGE_CAPITULATION_BASE_THRESHOLD);
 }
 
 /// Do we want to voluntarily become ePlayer's vassal?
@@ -56405,6 +56362,29 @@ bool CvDiplomacyAI::IsVoluntaryVassalageAcceptable(PlayerTypes ePlayer)
 
 	// ...or if we have more capitals than team members
 	if (iOurCapitals > iOurCivs)
+		return false;
+	
+	// Do we need protection at all? Are there hostile civs that are significantly stronger than us?
+	bool bNeedProtection = false;
+	for (int iPlayerLoop = 0; iPlayerLoop < MAX_MAJOR_CIVS; iPlayerLoop++)
+	{
+		PlayerTypes eLoopPlayer = (PlayerTypes)iPlayerLoop;
+		if (!GET_PLAYER(eLoopPlayer).isAlive() || !IsHasMet(eLoopPlayer))
+			continue;
+
+		if (GET_PLAYER(eLoopPlayer).getTeam() == GET_PLAYER(ePlayer).getTeam())
+			continue;
+
+		if (GET_PLAYER(eLoopPlayer).GetDiplomacyAI()->GetSurfaceApproach(GetID()) > CIV_APPROACH_GUARDED)
+			continue;
+
+		if (GetRawMilitaryStrengthComparedToUs(eLoopPlayer) < STRENGTH_POWERFUL)
+			continue;
+
+		bNeedProtection = true;
+		break;
+	}
+	if (!bNeedProtection)
 		return false;
 
 	// If we got down here, then vassalage is possible - let's evaluate
@@ -56693,7 +56673,7 @@ bool CvDiplomacyAI::IsVoluntaryVassalageAcceptable(PlayerTypes ePlayer)
 		break;
 	}
 
-	return iWantVassalageScore >= /*100*/ GD_INT_GET(VASSALAGE_CAPITULATE_BASE_THRESHOLD);
+	return iWantVassalageScore >= /*100*/ GD_INT_GET(VASSALAGE_VOLUNTARY_BASE_THRESHOLD);
 }
 
 /// Do we want to accept ePlayer as our voluntary vassal?
@@ -57129,7 +57109,7 @@ bool CvDiplomacyAI::IsEndVassalageWithPlayerAcceptable(PlayerTypes ePlayer)
 		break;
 	}
 
-	return iIndependenceScore >= 100; // todo: global define
+	return iIndependenceScore >= /*100*/ GD_INT_GET(VASSALAGE_INDEPENDENCE_BASE_THRESHOLD);
 }
 
 /// Player ended vassalage with us, is that acceptable?

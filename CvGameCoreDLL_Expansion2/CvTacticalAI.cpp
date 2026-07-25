@@ -385,6 +385,7 @@ void CvTacticalAI::UpdateVisibilityFromUnits(CvPlot* pPlot)
 						iI, pPlot->getX(), pPlot->getY(), pPlot->getNumUnits());
 					gGlobals.getDLLIFace()->sendChat(msg, CHATTARGET_ALL, NO_PLAYER);
 				}
+				continue;
 			}
 			PRECONDITION(pLoopUnit, "UpdateVisibilityFromUnits: Unit not found on plot, desync between plot unit list and actual unit positions");
 			eLoopUnitTeam = pLoopUnit->getTeam();
@@ -4538,7 +4539,7 @@ CvUnit* CvTacticalAI::FindUnitForThisMove(AITacticalMove eMove, CvPlot* pTarget,
 				iExtraScore += (120 * iCandidateContributionTimes100) / iCityStrengthNoGarrison;
 
 				// Naval garrisons cannot attack, so they're much worse
-				if (pLoopUnit->getDomainType() == DOMAIN_SEA && MOD_CORE_NO_NAVAL_RANGED_ATTACKS_FROM_CANALS && !pLoopUnit->isNativeDomain(pTarget))
+				if (pLoopUnit->getDomainType() == DOMAIN_SEA && MOD_CORE_NO_NAVAL_RANGED_ATTACKS_FROM_CITIES && !pLoopUnit->isNativeDomain(pTarget))
 					iExtraScore -= 50;
 
 				// Don't put units with a defense boosted from promotions in cities, these boosts are ignored
@@ -5283,7 +5284,7 @@ bool CvTacticalAI::ShouldRebase(CvUnit* pUnit) const
 		if (pCarrier && pCarrier->isProjectedToDieNextTurn())
 			return true;
 
-		if (pUnit->shouldHeal(true) && pCarrier->GetDanger(pUnitPlot)>0)
+		if (pUnit->shouldHeal(true) && pCarrier && pCarrier->GetDanger(pUnitPlot)>0)
 			return true;
 	}
 
@@ -6479,9 +6480,11 @@ bool TacticalAIHelpers::KillLoneEnemyIfPossible(CvUnit* pOurUnit, CvUnit* pEnemy
 				{
 					if (pOurUnit->TurnsToReachTarget(*it, CvUnit::MOVEFLAG_TURN_END_IS_NEXT_TURN, 1) == 0 && pOurUnit->canEverRangeStrikeAt(pEnemyUnit->getX(), pEnemyUnit->getY(), *it, false))
 					{
-						pOurUnit->PushMission(CvTypes::getMISSION_MOVE_TO(), (*it)->getX(), (*it)->getY(), CvUnit::MOVEFLAG_IGNORE_DANGER);
+						// PushMission might invalidate the iterator because of the shared buffer used in GetPlotsAtRangeX
+						CvPlot* pPlot = *it;
+						pOurUnit->PushMission(CvTypes::getMISSION_MOVE_TO(), pPlot->getX(), pPlot->getY(), CvUnit::MOVEFLAG_IGNORE_DANGER);
 						//sometimes the unit takes an unexpected path
-						if (pOurUnit->atPlot(**it))
+						if (pOurUnit->atPlot(*pPlot))
 							pOurUnit->PushMission(CvTypes::getMISSION_RANGE_ATTACK(), pEnemyUnit->getX(), pEnemyUnit->getY());
 						else
 							OutputDebugString("pathfinding issue ...\n");

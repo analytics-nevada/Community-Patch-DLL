@@ -19,8 +19,65 @@
 #include "CvTacticalAI.h"
 #include "CvTacticalAnalysisMap.h"
 #include "CvInternalGameCoreUtils.h"
+#include "SqliteLoggerRegistrations.h"
 
 #include "LintFree.h"
+
+// Helpers for logging religion choices to the SQLite stats database
+
+static const char* GetReligionChoiceBeliefType(BeliefTypes eBelief)
+{
+	if (eBelief == NO_BELIEF)
+		return "";
+
+	CvBeliefEntry* pBelief = GC.getBeliefInfo(eBelief);
+	if (!pBelief)
+		return "";
+
+	if (pBelief->IsPantheonBelief())
+		return "Pantheon";
+	if (pBelief->IsFounderBelief())
+		return "Founder";
+	if (pBelief->IsFollowerBelief())
+		return "Follower";
+	if (pBelief->IsEnhancerBelief())
+		return "Enhancer";
+	if (pBelief->IsReformationBelief())
+		return "Reformation";
+
+	return "";
+}
+
+static void LogReligionChoice(PlayerTypes ePlayer, const char* szAction, BeliefTypes eBelief, const char* szBeliefTypeOverride = NULL)
+{
+	if (!MOD_SQLITE_LOGGING || ePlayer == NO_PLAYER)
+		return;
+
+	RegisterReligionChoicesTable();
+
+	CvString strCiv = GET_PLAYER(ePlayer).getCivilizationShortDescription();
+	CvString strBelief = "";
+	CvString strBeliefType = "";
+
+	if (eBelief != NO_BELIEF)
+	{
+		CvBeliefEntry* pBelief = GC.getBeliefInfo(eBelief);
+		if (pBelief)
+			strBelief = GetLocalizedText(pBelief->getShortDescription());
+
+		if (szBeliefTypeOverride && szBeliefTypeOverride[0] != '\0')
+			strBeliefType = szBeliefTypeOverride;
+		else
+			strBeliefType = GetReligionChoiceBeliefType(eBelief);
+	}
+
+	GET_SQLITE_LOGGER().BeginLogRow("ReligionChoices")
+		.bind(strCiv.c_str())
+		.bind(szAction)
+		.bind(strBelief.c_str())
+		.bind(strBeliefType.c_str())
+		.execute();
+}
  
 //======================================================================================================
 //					CvReligionEntry
@@ -313,75 +370,75 @@ void CvGameReligions::SpreadReligionToOneCity(CvCity* pCity)
 	for (int iI = 0; iI < MAX_PLAYERS; iI++)
 	{
 		CvPlayer& kPlayer = GET_PLAYER((PlayerTypes)iI);
-		if (kPlayer.isAlive())
+		if (!kPlayer.isAlive())
+			continue;
+
+		// Loop through each of their cities
+		int iLoop = 0;
+		for (CvCity* pLoopCity = kPlayer.firstCity(&iLoop); pLoopCity != NULL; pLoopCity = kPlayer.nextCity(&iLoop))
 		{
-			// do they have a spy that spreads pressure?
-			int iSpyPressure = kPlayer.GetReligions()->GetSpyPressure((PlayerTypes)iI);
-			if (iSpyPressure > 0)
-			{
-				if (kPlayer.GetEspionage()->GetSpyIndexInCity(pCity) != -1)
-				{
-					ReligionTypes eReligionFounded = kPlayer.GetReligions()->GetStateReligion();
-					if (eReligionFounded != NO_RELIGION)
-					{
-						pCity->GetCityReligions()->AddSpyPressure(eReligionFounded, iSpyPressure);
-					}
-				}
-			}
+			// Ignore the same city
+			if (pCity == pLoopCity)
+				continue;
 
-			// do we have their franchise that spreads pressure?
-			int iFranchisePressure = kPlayer.GetFranchisePressure();
-			if (iFranchisePressure > 0)
+			for (int iI = RELIGION_PANTHEON + 1; iI < GC.GetGameReligions()->GetNumReligions(); iI++)
 			{
-				CorporationTypes eCorporation = kPlayer.GetCorporations()->GetFoundedCorporation();
-				if (eCorporation != NO_CORPORATION && pCity->IsHasFranchise(eCorporation))
-				{
-					ReligionTypes eReligionFounded = kPlayer.GetReligions()->GetStateReligion();
-					if (eReligionFounded != NO_RELIGION)
-					{
-						pCity->GetCityReligions()->AddFranchisePressure(eReligionFounded, iFranchisePressure);
-					}
-				}
-			}
+				ReligionTypes eReligion = (ReligionTypes)iI;
 
-			// Loop through each of their cities
-			int iLoop = 0;
-			CvCity* pLoopCity = NULL;
-			for (pLoopCity = kPlayer.firstCity(&iLoop); pLoopCity != NULL; pLoopCity = kPlayer.nextCity(&iLoop))
-			{
-				// Ignore the same city
-				if (pCity == pLoopCity)
-				{
+				if (!IsValidTarget(eReligion, pLoopCity, pCity))
 					continue;
-				}
 
-				for (int iI = RELIGION_PANTHEON + 1; iI < GC.GetGameReligions()->GetNumReligions(); iI++)
+				if (pLoopCity->GetCityReligions()->GetNumFollowers(eReligion) > 0)
 				{
-					ReligionTypes eReligion = (ReligionTypes)iI;
-
-					if (!IsValidTarget(eReligion, pLoopCity, pCity))
+					bool bConnectedWithTrade = false;
+					int iRelativeDistancePercent = 0;
+					if (!IsCityConnectedToCity(eReligion, pLoopCity, pCity, bConnectedWithTrade, iRelativeDistancePercent))
 						continue;
 
-					if (pLoopCity->GetCityReligions()->GetNumFollowers(eReligion) > 0)
+					int iNumTradeRoutes = 0;
+					int iPressure = GetAdjacentCityReligiousPressure(eReligion, pLoopCity, pCity, iNumTradeRoutes, true, false, bConnectedWithTrade, iRelativeDistancePercent);
+					if (iPressure > 0)
 					{
-						bool bConnectedWithTrade = false;
-						int iRelativeDistancePercent = 0;
-						if (!IsCityConnectedToCity(eReligion, pLoopCity, pCity, bConnectedWithTrade, iRelativeDistancePercent))
-							continue;
-
-						int iNumTradeRoutes = 0;
-						int iPressure = GetAdjacentCityReligiousPressure(eReligion, pLoopCity, pCity, iNumTradeRoutes, true, false, bConnectedWithTrade, iRelativeDistancePercent);
-						if (iPressure > 0)
+						pCity->GetCityReligions()->AddReligiousPressure(FOLLOWER_CHANGE_ADJACENT_PRESSURE, eReligion, iPressure);
+						pCity->GetCityReligions()->RecomputeFollowers(FOLLOWER_CHANGE_ADJACENT_PRESSURE);
+						if (iNumTradeRoutes != 0)
 						{
-							pCity->GetCityReligions()->AddReligiousPressure(FOLLOWER_CHANGE_ADJACENT_PRESSURE, eReligion, iPressure);
-							pCity->GetCityReligions()->RecomputeFollowers(FOLLOWER_CHANGE_ADJACENT_PRESSURE);
-							if (iNumTradeRoutes != 0)
-							{
-								pCity->GetCityReligions()->IncrementNumTradeRouteConnections(eReligion, iNumTradeRoutes);
-							}
+							pCity->GetCityReligions()->IncrementNumTradeRouteConnections(eReligion, iNumTradeRoutes);
 						}
 					}
 				}
+			}
+		}
+
+		if (iI >= MAX_MAJOR_CIVS)
+			continue;
+
+		ReligionTypes eStateReligion = kPlayer.GetReligions()->GetStateReligion(false);
+		if (eStateReligion == NO_RELIGION)
+			continue;
+
+		// do we have their franchise that spreads pressure?
+		int iFranchisePressure = kPlayer.GetFranchisePressure();
+		if (iFranchisePressure > 0)
+		{
+			CorporationTypes eCorporation = kPlayer.GetCorporations()->GetFoundedCorporation();
+			if (eCorporation != NO_CORPORATION && pCity->IsHasFranchise(eCorporation))
+				pCity->GetCityReligions()->AddFranchisePressure(eStateReligion, iFranchisePressure);
+		}
+
+		// do they have a spy that spreads pressure?
+		CvPlayerEspionage* pEspionage = kPlayer.GetEspionage();
+		if (pEspionage && pEspionage->GetSpyIndexInCity(pCity) != -1)
+		{
+			CvEspionageSpy* pSpy = pEspionage->GetSpyByID(pEspionage->GetSpyIndexInCity(pCity));
+			if (pSpy->GetSpyState() != SPY_STATE_TRAVELLING)
+			{
+				int iSpyPressure = kPlayer.GetReligions()->GetSpyPressure((PlayerTypes)iI);
+				int iSpyPressureErosion = kPlayer.GetReligions()->GetSpyPressureErosion((PlayerTypes)iI);
+				if (iSpyPressure > 0)
+					pCity->GetCityReligions()->AddSpyPressure(eStateReligion, iSpyPressure);
+				if (iSpyPressureErosion > 0)
+					pCity->GetCityReligions()->DoSpyPressureErosion(eStateReligion, iSpyPressureErosion, (PlayerTypes)iI);
 			}
 		}
 	}
@@ -1169,6 +1226,11 @@ void CvGameReligions::FoundPantheon(PlayerTypes ePlayer, BeliefTypes eBelief)
 			LogReligionMessage(strLogMsg);
 		}
 
+		if (MOD_SQLITE_LOGGING)
+		{
+			LogReligionChoice(ePlayer, "PANTHEON_FOUNDED", eBelief, "Pantheon");
+		}
+
 		//Achievements!
 		if (MOD_ENABLE_ACHIEVEMENTS && ePlayer == GC.getGame().getActivePlayer())
 			gDLL->UnlockAchievement(ACHIEVEMENT_XP1_10);
@@ -1256,6 +1318,18 @@ void CvGameReligions::FoundReligion(PlayerTypes ePlayer, ReligionTypes eReligion
 	// Update game systems
 	kPlayer.UpdateReligion();
 	kPlayer.GetReligions()->SetFoundingReligion(false);
+
+	if (MOD_SQLITE_LOGGING)
+	{
+		if (eBelief1 != NO_BELIEF)
+			LogReligionChoice(ePlayer, "RELIGION_FOUNDED", eBelief1);
+		if (eBelief2 != NO_BELIEF)
+			LogReligionChoice(ePlayer, "RELIGION_FOUNDED", eBelief2);
+		if (eBelief3 != NO_BELIEF)
+			LogReligionChoice(ePlayer, "RELIGION_FOUNDED", eBelief3);
+		if (eBelief4 != NO_BELIEF)
+			LogReligionChoice(ePlayer, "RELIGION_FOUNDED", eBelief4);
+	}
 
 	// In case we have another prophet sitting around, make sure he's set to this religion and is at full strength
 	int iLoopUnit = 0;
@@ -1615,6 +1689,14 @@ void CvGameReligions::EnhanceReligion(PlayerTypes ePlayer, ReligionTypes eReligi
 		LogReligionMessage(strLogMsg);
 	}
 
+	if (MOD_SQLITE_LOGGING)
+	{
+		if (eBelief1 != NO_BELIEF)
+			LogReligionChoice(ePlayer, "RELIGION_ENHANCED", eBelief1);
+		if (eBelief2 != NO_BELIEF)
+			LogReligionChoice(ePlayer, "RELIGION_ENHANCED", eBelief2);
+	}
+
 	GC.GetEngineUserInterface()->setDirty(CityInfo_DIRTY_BIT, true);
 }
 
@@ -1742,6 +1824,11 @@ void CvGameReligions::AddReformationBelief(PlayerTypes ePlayer, ReligionTypes eR
 		strLogMsg = kPlayer.getCivilizationShortDescription();
 		strLogMsg += ", REFORMATION BELIEF ADDED";
 		LogReligionMessage(strLogMsg);
+	}
+
+	if (MOD_SQLITE_LOGGING)
+	{
+		LogReligionChoice(ePlayer, "RELIGION_REFORMED", eBelief1, "Reformation");
 	}
 	GC.GetEngineUserInterface()->setDirty(CityInfo_DIRTY_BIT, true);
 }
@@ -2838,7 +2925,7 @@ int CvGameReligions::GetAdjacentCityReligiousPressure(ReligionTypes eReligion, C
 		iPressureMod += /*100*/ GD_INT_GET(VASSAL_PRESSURE_PERCENT);
 	}
 
-	// Modify iPressure based on city defenses, but only against hostile cities (ie any not the same player as this city)
+	// Modify iPressure based on city defenses, but only against hostile cities (i.e., any not the same player as this city)
 	PlayerTypes eFromPlayer = pFromCity->getOwner();
 	PlayerTypes eToPlayer = pToCity->getOwner();
 	
@@ -3907,7 +3994,24 @@ int CvPlayerReligions::GetCityStateYieldModifier(PlayerTypes ePlayer) const
 		}
 	}
 	return iRtnValue;
-} 
+}
+
+/// Does this player benefit from a boost in Spy NP generation?
+int CvPlayerReligions::GetEspionageNetworkPoints(PlayerTypes ePlayer) const
+{
+	int iRtnValue = 0;
+	ReligionTypes eReligion = m_pPlayer->GetReligions()->GetStateReligion();
+	if (eReligion != NO_RELIGION)
+	{
+		const CvReligion* pReligion = GC.getGame().GetGameReligions()->GetReligion(eReligion, NO_PLAYER);
+		if (pReligion)
+		{
+			CvCity* pHolyCity = pReligion->GetHolyCity();
+			iRtnValue += pReligion->m_Beliefs.GetEspionageNetworkPoints(ePlayer, pHolyCity);
+		}
+	}
+	return iRtnValue;
+}
 
 /// Does this player get religious pressure from spies?
 int CvPlayerReligions::GetSpyPressure(PlayerTypes ePlayer) const
@@ -3921,6 +4025,23 @@ int CvPlayerReligions::GetSpyPressure(PlayerTypes ePlayer) const
 		{
 			CvCity* pHolyCity = pReligion->GetHolyCity();
 			iRtnValue += pReligion->m_Beliefs.GetSpyPressure(ePlayer, pHolyCity);
+		}
+	}
+	return iRtnValue;
+}
+
+/// Do this player's spies erode the pressure of other religions?
+int CvPlayerReligions::GetSpyPressureErosion(PlayerTypes ePlayer) const
+{
+	int iRtnValue = 0;
+	ReligionTypes eReligion = m_pPlayer->GetReligions()->GetStateReligion();
+	if (eReligion != NO_RELIGION)
+	{
+		const CvReligion* pReligion = GC.getGame().GetGameReligions()->GetReligion(eReligion, NO_PLAYER);
+		if (pReligion)
+		{
+			CvCity* pHolyCity = pReligion->GetHolyCity();
+			iRtnValue += pReligion->m_Beliefs.GetSpyPressureErosion(ePlayer, pHolyCity);
 		}
 	}
 	return iRtnValue;
@@ -4523,67 +4644,81 @@ int CvCityReligions::GetPressurePerTurn(ReligionTypes eReligion, int* piNumSourc
 	int iCount = 0;
 	
 	// Loop through all the players
-	for(int iI = 0; iI < MAX_PLAYERS; iI++)
+	for (int iI = 0; iI < MAX_PLAYERS; iI++)
 	{
 		CvPlayer& kPlayer = GET_PLAYER((PlayerTypes)iI);
-		if(kPlayer.isAlive())
+		if (!kPlayer.isAlive())
+			continue;
+
+		// Loop through each of their cities
+		int iLoop = 0;
+		for (CvCity* pLoopCity = kPlayer.firstCity(&iLoop); pLoopCity != NULL; pLoopCity = kPlayer.nextCity(&iLoop))
 		{
-			// Loop through each of their cities
-			int iLoop = 0;
-			CvCity* pLoopCity = NULL;
-			for(pLoopCity = kPlayer.firstCity(&iLoop); pLoopCity != NULL; pLoopCity = kPlayer.nextCity(&iLoop))
+			// Ignore the same city
+			if (m_pCity == pLoopCity)
+				continue;
+
+			if (pLoopCity->GetCityReligions()->GetNumFollowers(eReligion) <= 0)
+				continue;
+
+			if (!GC.getGame().GetGameReligions()->IsValidTarget(eReligion, pLoopCity, m_pCity))
+				continue;
+
+			//it would be nice to use CvGameTrade::GetAllPotentialTradeRoutesFromCity() for each of our cities
+			//to save the loop over all players, but unfortunately we also need to check incoming trade routes
+			bool bConnectedWithTrade = false;
+			int iRelativeDistancePercent = 0;
+			if (!GC.getGame().GetGameReligions()->IsCityConnectedToCity(eReligion, pLoopCity, m_pCity, bConnectedWithTrade, iRelativeDistancePercent))
+				continue;
+
+			int iNumTradeRoutes = 0;
+			int iNewPressure = GC.getGame().GetGameReligions()->GetAdjacentCityReligiousPressure(eReligion, pLoopCity, m_pCity, iNumTradeRoutes, false, false, bConnectedWithTrade, iRelativeDistancePercent);
+
+			if (iNewPressure > 0)
 			{
-				// Ignore the same city
-				if (m_pCity == pLoopCity)
-					continue;
-
-				if (pLoopCity->GetCityReligions()->GetNumFollowers(eReligion) <= 0)
-					continue;
-
-				if (!GC.getGame().GetGameReligions()->IsValidTarget(eReligion, pLoopCity, m_pCity))
-					continue;
-
-				//it would be nice to use CvGameTrade::GetAllPotentialTradeRoutesFromCity() for each of our cities
-				//to save the loop over all players, but unfortunately we also need to check incoming trade routes
-				bool bConnectedWithTrade = false;
-				int iRelativeDistancePercent = 0;
-				if (!GC.getGame().GetGameReligions()->IsCityConnectedToCity(eReligion, pLoopCity, m_pCity, bConnectedWithTrade, iRelativeDistancePercent))
-					continue;
-
-				int iNumTradeRoutes = 0;
-				int iNewPressure = GC.getGame().GetGameReligions()->GetAdjacentCityReligiousPressure(eReligion, pLoopCity, m_pCity, iNumTradeRoutes, false, false, bConnectedWithTrade, iRelativeDistancePercent);
-
-				if (iNewPressure > 0)
-				{
-					iPressure += iNewPressure;
-					iCount++;
-				}
+				iPressure += iNewPressure;
+				iCount++;
 			}
+		}
 
-			// Include any pressure from "Underground Sects"
-			if (eReligion > RELIGION_PANTHEON && kPlayer.GetReligions()->GetStateReligion() == eReligion)
+		if (iI >= MAX_MAJOR_CIVS)
+			continue;
+
+		ReligionTypes eStateReligion = kPlayer.GetReligions()->GetStateReligion(false);
+		if (eStateReligion == NO_RELIGION)
+			continue;
+
+		// Include any pressure from Franchises
+		if (eStateReligion == eReligion)
+		{
+			int iFranchisePressure = kPlayer.GetFranchisePressure();
+			if (iFranchisePressure > 0)
 			{
-				int iSpyPressure = kPlayer.GetReligions()->GetSpyPressure((PlayerTypes)iI);
-				if (iSpyPressure > 0)
+				CorporationTypes eCorporation = kPlayer.GetCorporations()->GetFoundedCorporation();
+				if (eCorporation != NO_CORPORATION && m_pCity->IsHasFranchise(eCorporation))
+					iPressure += iFranchisePressure * max(1, GC.getGame().getGameSpeedInfo().getReligiousPressureAdjacentCity());
+			}
+		}
+
+		CvPlayerEspionage* pEspionage = kPlayer.GetEspionage();
+		if (pEspionage && pEspionage->GetSpyIndexInCity(m_pCity) != -1)
+		{
+			CvEspionageSpy* pSpy = pEspionage->GetSpyByID(pEspionage->GetSpyIndexInCity(m_pCity));
+			if (pSpy->GetSpyState() != SPY_STATE_TRAVELLING)
+			{
+				// Do they have a spy that applies pressure to this religion?
+				if (eStateReligion == eReligion)
 				{
-					if (kPlayer.GetEspionage()->GetSpyIndexInCity(m_pCity) != -1)
-					{
+					int iSpyPressure = kPlayer.GetReligions()->GetSpyPressure((PlayerTypes)iI);
+					if (iSpyPressure > 0)
 						iPressure += iSpyPressure * max(1, GC.getGame().getGameSpeedInfo().getReligiousPressureAdjacentCity());
-					}
 				}
-			}
-			
-			// Include any pressure from Franchises
-			if (eReligion > RELIGION_PANTHEON && kPlayer.GetReligions()->GetStateReligion() == eReligion)
-			{
-				int iFranchisePressure = kPlayer.GetFranchisePressure();
-				if (iFranchisePressure > 0)
+				// Do they have a spy that erodes pressure from other religions?
+				else
 				{
-					CorporationTypes eCorporation = kPlayer.GetCorporations()->GetFoundedCorporation();
-					if (eCorporation != NO_CORPORATION && m_pCity->IsHasFranchise(eCorporation))
-					{
-						iPressure += iFranchisePressure * max(1, GC.getGame().getGameSpeedInfo().getReligiousPressureAdjacentCity());
-					}
+					int iSpyPressureErosion = kPlayer.GetReligions()->GetSpyPressureErosion((PlayerTypes)iI);
+					if (iSpyPressureErosion > 0)
+						iPressure -= iSpyPressureErosion * max(1, GC.getGame().getGameSpeedInfo().getReligiousPressureAdjacentCity());
 				}
 			}
 		}
@@ -4595,6 +4730,7 @@ int CvCityReligions::GetPressurePerTurn(ReligionTypes eReligion, int* piNumSourc
 		int iHolyCityPressure = GC.getGame().getGameSpeedInfo().getReligiousPressureAdjacentCity();
 		iHolyCityPressure *=  /*5*/ GD_INT_GET(RELIGION_PER_TURN_FOUNDING_CITY_PRESSURE);
 		iPressure += iHolyCityPressure;
+		iCount++;
 	}
 	
 	if (piNumSourceCities)
@@ -5040,7 +5176,7 @@ void CvCityReligions::AddHolyCityPressure()
 	ReligionTypes eHolyReligion = GetReligionForHolyCity();
 	if (eHolyReligion != NO_RELIGION)
 	{
-		int iHolyPressure = GC.getGame().getGameSpeedInfo().getReligiousPressureAdjacentCity() *  /*5*/ GD_INT_GET(RELIGION_PER_TURN_FOUNDING_CITY_PRESSURE);
+		int iHolyPressure = GC.getGame().getGameSpeedInfo().getReligiousPressureAdjacentCity() * /*5*/ GD_INT_GET(RELIGION_PER_TURN_FOUNDING_CITY_PRESSURE);
 		AddReligiousPressure(FOLLOWER_CHANGE_HOLY_CITY, eHolyReligion, iHolyPressure);
 		RecomputeFollowers(FOLLOWER_CHANGE_HOLY_CITY);
 	}
@@ -5050,6 +5186,28 @@ void CvCityReligions::AddHolyCityPressure()
 void CvCityReligions::AddSpyPressure(ReligionTypes eReligion, int iBasePressure)
 {
 	AddReligiousPressure(FOLLOWER_CHANGE_SPY_PRESSURE, eReligion, iBasePressure*GC.getGame().getGameSpeedInfo().getReligiousPressureAdjacentCity());
+	RecomputeFollowers(FOLLOWER_CHANGE_SPY_PRESSURE);
+}
+
+/// Remove pressure from followers of other religions
+void CvCityReligions::DoSpyPressureErosion(ReligionTypes eReligion, int iBasePressure, PlayerTypes eResponsiblePlayer)
+{
+	ReligionInCityList::iterator it;
+	for (it = m_ReligionStatus.begin(); it != m_ReligionStatus.end(); it++)
+	{
+		//ignore atheists and pantheons
+		if (it->m_eReligion == NO_RELIGION || it->m_eReligion <= RELIGION_PANTHEON)
+			continue;
+		
+		//do not touch the exempted religion or dead ones
+		if (eReligion == it->m_eReligion || it->m_iPressure==0)
+			continue;
+
+		// make it so!
+		int iReductionAmount = max(iBasePressure * GC.getGame().getGameSpeedInfo().getReligiousPressureAdjacentCity() * -1, -it->m_iPressure);
+		it->m_iPressure += iReductionAmount;
+		LogPressureChange(FOLLOWER_CHANGE_SPY_PRESSURE, it->m_eReligion, iReductionAmount, it->m_iPressure, eResponsiblePlayer);
+	}
 	RecomputeFollowers(FOLLOWER_CHANGE_SPY_PRESSURE);
 }
 
@@ -8357,7 +8515,12 @@ int CvReligionAI::ScorePantheonBeliefAtCity(CvBeliefEntry* pEntry, CvCity* pCity
 
 						int iEraNeeded = pkTechInfo->GetEra();
 						int iCurrentEra = m_pPlayer->GetCurrentEra();
-						iAvailabilityModifier = max(0, 3 - (iEraNeeded - iCurrentEra));  // lose remaining value if we have to wait
+						iAvailabilityModifier = 3 - (iEraNeeded - iCurrentEra);  // lose remaining value if we have to wait
+						if (!pCity)
+						{
+							iAvailabilityModifier--;
+						}
+						iAvailabilityModifier = max(0, iAvailabilityModifier);
 					}
 				}
 			}
@@ -8416,11 +8579,16 @@ int CvReligionAI::ScorePantheonBeliefAtCity(CvBeliefEntry* pEntry, CvCity* pCity
 			iTempValue += 2 * min(iCap, iExpectedGrowth / pEntry->GetFollowerRequiredPerYield(iI));
 		}
 
-		// caps at half number of followers. assume we are at cap.
+		// caps at half number of followers.
 		if (pEntry->GetYieldPerGPT(iI) > 0)
 		{
-			iTempValue += 10 * (iCurrentCityPop / 2) ;
-			iTempValue += 5 * (iExpectedGrowth / 2);
+			if (pCity)
+			{
+				iTempValue += 10 * min((iCurrentCityPop / 2), (pCity->getYieldRateTimes100((YieldTypes)iI, false) / (pEntry->GetYieldPerGPT(iI) * 100)));
+				int iNewPop = iCurrentCityPop + iExpectedGrowth;
+				// assume yields will increase proportionally to pop
+				iTempValue += 5 * min(iNewPop / 2, (iNewPop * pCity->getYieldRateTimes100((YieldTypes)iI, false) / (pEntry->GetYieldPerGPT(iI) * 100 * iCurrentCityPop)));
+			}
 		}
 
 		// yield per birth
@@ -8662,11 +8830,12 @@ int CvReligionAI::ScorePantheonBeliefAtCity(CvBeliefEntry* pEntry, CvCity* pCity
 
 							int iEraNeeded = pkTechInfo->GetEra();
 							int iCurrentEra = m_pPlayer->GetCurrentEra();
-							iAvailabilityModifier = max(0, 3 - (iEraNeeded - iCurrentEra));  // lose remaining value if we have to wait
-						}
-						if (!pCity)
-						{
-							iAvailabilityModifier--;
+							iAvailabilityModifier = 3 - (iEraNeeded - iCurrentEra);  // lose remaining value if we have to wait
+							if (!pCity)
+							{
+								iAvailabilityModifier--;
+							}
+							iAvailabilityModifier = max(0, iAvailabilityModifier);
 						}
 					}
 				}
@@ -9853,14 +10022,25 @@ int CvReligionAI::ScoreBeliefForPlayer(CvBeliefEntry* pEntry, bool bReturnConque
 			iSpreadTemp += iSpreadTempCS;
 		}
 
-		if (pEntry->GetSpyPressure() != 0)
+		if (!GC.getGame().isOption(GAMEOPTION_NO_ESPIONAGE))
 		{
-			iSpreadTemp += (pEntry->GetSpyPressure() * m_pPlayer->GetEspionage()->GetNumSpies());
-			iSpreadTemp /= 2;
-
-			if (m_pPlayer->GetEspionageModifier() != 0)
+			if (pEntry->GetSpyPressure() != 0)
 			{
-				iSpreadTemp *= 2;
+				iSpreadTemp += (pEntry->GetSpyPressure() * max(2, m_pPlayer->GetEspionage()->GetNumSpies()));
+				iSpreadTemp /= 2;
+
+				if (m_pPlayer->GetEspionageModifier() != 0)
+				{
+					iSpreadTemp *= 2;
+				}
+			}
+			if (pEntry->GetSpyPressureErosion() != 0)
+			{
+				iSpreadTemp += (pEntry->GetSpyPressureErosion() * max(2, m_pPlayer->GetEspionage()->GetNumSpies()));
+				if (m_pPlayer->GetEspionageModifier() != 0)
+				{
+					iSpreadTemp *= 2;
+				}
 			}
 		}
 
@@ -10161,9 +10341,20 @@ int CvReligionAI::ScoreBeliefForPlayer(CvBeliefEntry* pEntry, bool bReturnConque
 		}
 	}
 
-	if (pEntry->GetHappinessFromForeignSpies() != 0)
+	if (!GC.getGame().isOption(GAMEOPTION_NO_ESPIONAGE))
 	{
-		iDiploTemp += pEntry->GetHappinessFromForeignSpies() * max(2, m_pPlayer->GetEspionage()->GetNumSpies() * 25);
+		if (pEntry->GetEspionageNetworkPoints() != 0)
+		{
+			iDiploTemp += pEntry->GetEspionageNetworkPoints() * max(2, m_pPlayer->GetEspionage()->GetNumSpies() * 6);
+		}
+		if (pEntry->GetHappinessFromSpies() != 0)
+		{
+			iDiploTemp += pEntry->GetHappinessFromSpies() * max(2, m_pPlayer->GetEspionage()->GetNumSpies() * 30);
+		}
+		if (pEntry->GetHappinessFromForeignSpies() != 0)
+		{
+			iDiploTemp += pEntry->GetHappinessFromForeignSpies() * max(2, m_pPlayer->GetEspionage()->GetNumSpies() * 25);
+		}
 	}
 
 	for (int iI = 0; iI < NUM_YIELD_TYPES; iI++)

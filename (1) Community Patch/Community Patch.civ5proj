@@ -5,16 +5,16 @@
     <ProjectGuid>{0d66d522-b624-4bc5-acfe-15a0c5b729f4}</ProjectGuid>
     <Name>(1) Community Patch</Name>
     <Guid>d1b6328c-ff44-4b0d-aad7-c657f83610cd</Guid>
-    <ModVersion>150</ModVersion>
+    <ModVersion>151</ModVersion>
     <Stability>Stable</Stability>
-    <Teaser>(5.3.3) Bugfixes, AI Improvements, Game Optimizations and API Extensions for Civ V</Teaser>
+    <Teaser>(5.4.1) Bugfixes, AI Improvements, Game Optimizations and API Extensions for Civ V</Teaser>
     <Description>Contains core AI improvements and bugfixes for the Civ 5 BNW DLL. Also contains support for the Vox Populi unofficial expansion and its associated mods.</Description>
     <Authors>CivFanatics Community Patch Project Team</Authors>
     <SpecialThanks>
     </SpecialThanks>
     <Categories>$Categories$</Categories>
     <AffectsSavedGames>true</AffectsSavedGames>
-    <MinCompatibleSaveVersion>150</MinCompatibleSaveVersion>
+    <MinCompatibleSaveVersion>151</MinCompatibleSaveVersion>
     <SupportsSinglePlayer>true</SupportsSinglePlayer>
     <SupportsMultiplayer>true</SupportsMultiplayer>
     <SupportsHotSeat>true</SupportsHotSeat>
@@ -148,6 +148,11 @@
         <Set>OnGetDLLPath</Set>
         <Type>SetDllPath</Type>
         <FileName>CvGameCore_Expansion2.dll</FileName>
+      </Action>
+      <Action>
+        <Set>OnModActivated</Set>
+        <Type>UpdateDatabase</Type>
+        <FileName>Database Changes\FixTypeConstraints.sql</FileName>
       </Action>
       <Action>
         <Set>OnModActivated</Set>
@@ -562,6 +567,11 @@
       <Action>
         <Set>OnModActivated</Set>
         <Type>UpdateDatabase</Type>
+        <FileName>Database Changes\Minors\CoreMinorQuestChanges.sql</FileName>
+      </Action>
+      <Action>
+        <Set>OnModActivated</Set>
+        <Type>UpdateDatabase</Type>
         <FileName>Database Changes\UnitPromotions\CoreNewPromotions.xml</FileName>
       </Action>
       <Action>
@@ -573,11 +583,6 @@
         <Set>OnModActivated</Set>
         <Type>UpdateDatabase</Type>
         <FileName>Database Changes\Units\GreatPeople\CoreNewGreatPeople.xml</FileName>
-      </Action>
-      <Action>
-        <Set>OnModActivated</Set>
-        <Type>UpdateDatabase</Type>
-        <FileName>Database Changes\WorldMap\NewAncientRuins.xml</FileName>
       </Action>
       <Action>
         <Set>OnModActivated</Set>
@@ -787,6 +792,11 @@
       <Action>
         <Set>OnModActivated</Set>
         <Type>UpdateDatabase</Type>
+        <FileName>Database Changes\Misc\CoreNewMissions.xml</FileName>
+      </Action>
+      <Action>
+        <Set>OnModActivated</Set>
+        <Type>UpdateDatabase</Type>
         <FileName>Database Changes\WorldMap\Improvements\CoreBuildSweeps.sql</FileName>
       </Action>
       <Action>
@@ -932,6 +942,11 @@
       <Action>
         <Set>OnModActivated</Set>
         <Type>UpdateDatabase</Type>
+        <FileName>Database Changes\Text\en_US\UI\CoreNewMissionText.xml</FileName>
+      </Action>
+      <Action>
+        <Set>OnModActivated</Set>
+        <Type>UpdateDatabase</Type>
         <FileName>Database Changes\Text\en_US\UI\CoreNewUIText.xml</FileName>
       </Action>
       <Action>
@@ -992,12 +1007,7 @@
       <Action>
         <Set>OnModActivated</Set>
         <Type>UpdateDatabase</Type>
-        <FileName>Database Migrations/2025_01_27_AddTableIndexes.sql</FileName>
-      </Action>
-      <Action>
-        <Set>OnModActivated</Set>
-        <Type>UpdateDatabase</Type>
-        <FileName>Database Migrations/2026_01_17_FixTypeConstraints.sql</FileName>
+        <FileName>Database Changes\AddTableIndexes.sql</FileName>
       </Action>
     </ModActions>
     <ModContent>
@@ -1154,7 +1164,6 @@
     <Folder Include="LUA\Includes" />
     <Folder Include="Mapscripts" />
     <Folder Include="Kit" />
-    <Folder Include="Database Migrations" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Assets\DoMImages\dom_catherine.dds">
@@ -3045,6 +3054,10 @@
       <SubType>Lua</SubType>
       <ImportIntoVFS>True</ImportIntoVFS>
     </Content>
+    <Content Include="Database Changes\AddTableIndexes.sql">
+      <SubType>Lua</SubType>
+      <ImportIntoVFS>False</ImportIntoVFS>
+    </Content>
     <Content Include="Database Changes\CommunityTables.xml">
       <SubType>Lua</SubType>
       <ImportIntoVFS>False</ImportIntoVFS>
@@ -3085,6 +3098,10 @@
       <SubType>Lua</SubType>
       <ImportIntoVFS>False</ImportIntoVFS>
     </Content>
+    <Content Include="Database Changes\FixTypeConstraints.sql">
+      <SubType>Lua</SubType>
+      <ImportIntoVFS>False</ImportIntoVFS>
+    </Content>
     <Content Include="Database Changes\GameSpeedTableChanges.sql">
       <SubType>Lua</SubType>
       <ImportIntoVFS>False</ImportIntoVFS>
@@ -3094,6 +3111,10 @@
       <ImportIntoVFS>False</ImportIntoVFS>
     </Content>
     <Content Include="Database Changes\Misc\NewInterfaceModes.xml">
+      <SubType>Lua</SubType>
+      <ImportIntoVFS>False</ImportIntoVFS>
+    </Content>
+    <Content Include="Database Changes\Misc\CoreNewMissions.xml">
       <SubType>Lua</SubType>
       <ImportIntoVFS>False</ImportIntoVFS>
     </Content>
@@ -3321,6 +3342,10 @@
       <SubType>Lua</SubType>
       <ImportIntoVFS>False</ImportIntoVFS>
     </Content>
+    <Content Include="Database Changes\Minors\CoreMinorQuestChanges.sql">
+      <SubType>Lua</SubType>
+      <ImportIntoVFS>False</ImportIntoVFS>
+    </Content>
     <Content Include="Database Changes\Minors\CoreMinorYieldChanges.sql">
       <SubType>Lua</SubType>
       <ImportIntoVFS>False</ImportIntoVFS>
@@ -3497,6 +3522,10 @@
       <SubType>Lua</SubType>
       <ImportIntoVFS>False</ImportIntoVFS>
     </Content>
+    <Content Include="Database Changes\Text\en_US\UI\CoreNewMissionText.xml">
+      <SubType>Lua</SubType>
+      <ImportIntoVFS>False</ImportIntoVFS>
+    </Content>
     <Content Include="Database Changes\Text\en_US\UI\CoreNewUIText.xml">
       <SubType>Lua</SubType>
       <ImportIntoVFS>False</ImportIntoVFS>
@@ -3629,10 +3658,6 @@
       <SubType>Lua</SubType>
       <ImportIntoVFS>False</ImportIntoVFS>
     </Content>
-    <Content Include="Database Changes\WorldMap\NewAncientRuins.xml">
-      <SubType>Lua</SubType>
-      <ImportIntoVFS>False</ImportIntoVFS>
-    </Content>
     <Content Include="Database Changes\WorldMap\Features\CoreFeatureChanges.sql">
       <SubType>Lua</SubType>
       <ImportIntoVFS>False</ImportIntoVFS>
@@ -3714,14 +3739,6 @@
       <ImportIntoVFS>False</ImportIntoVFS>
     </Content>
     <Content Include="Database Changes\WorldMap\Yields\YieldTableChanges.sql">
-      <SubType>Lua</SubType>
-      <ImportIntoVFS>False</ImportIntoVFS>
-    </Content>
-    <Content Include="Database Migrations\2025_01_27_AddTableIndexes.sql">
-      <SubType>Lua</SubType>
-      <ImportIntoVFS>False</ImportIntoVFS>
-    </Content>
-    <Content Include="Database Migrations\2026_01_17_FixTypeConstraints.sql">
       <SubType>Lua</SubType>
       <ImportIntoVFS>False</ImportIntoVFS>
     </Content>

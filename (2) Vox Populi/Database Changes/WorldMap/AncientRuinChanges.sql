@@ -6,7 +6,6 @@ SET
 WHERE Type = 'GOODY_MAP';
 
 -- Ruin yields
-UPDATE GoodyHuts SET Production = 50 WHERE Type = 'GOODY_PRODUCTION';
 UPDATE GoodyHuts SET Gold = 100, NumGoldRandRolls = 0 WHERE Type = 'GOODY_GOLD';
 UPDATE GoodyHuts SET Culture = 15 WHERE Type = 'GOODY_CULTURE';
 UPDATE GoodyHuts SET PantheonFaith = 0, PantheonPercent = 60 WHERE Type = 'GOODY_PANTHEON_FAITH';

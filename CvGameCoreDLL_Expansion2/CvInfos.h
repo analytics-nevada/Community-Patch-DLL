@@ -1684,6 +1684,7 @@ public:
 	int getMinBarbarians() const;
 	int getUnitClassType() const;
 	int getBarbarianUnitClass() const;
+	int getPromotionType() const;
 
 	bool isTech() const;
 	bool isRevealUnknownResource() const;
@@ -1725,6 +1726,7 @@ protected:
 	int m_iMinBarbarians;
 	int m_iUnitClassType;
 	int m_iBarbarianUnitClass;
+	int m_iPromotionType;
 
 	bool m_bTech;
 	bool m_bRevealUnknownResource;
@@ -2356,8 +2358,8 @@ public:
 	int getFeatureGrainChange() const;
 	int getResearchPercent() const;
 	int getNumCitiesUnhappinessPercent() const;
-	int GetNumCitiesPolicyCostMod() const;
-	int GetNumCitiesTechCostMod() const;
+	int GetNumCitiesPolicyCostModTimes100() const;
+	int GetNumCitiesTechCostModTimes100() const;
 	int GetNumCitiesTourismCostMod() const;
 	int GetNumCitiesUnitSupplyMod() const;
 	int getTradeRouteDistanceMod() const;
@@ -3561,6 +3563,7 @@ public:
 	CvModEventCityChoiceInfo();
 	virtual ~CvModEventCityChoiceInfo();
 
+	const char* getEventDescription() const;
 	bool isParentEvent(CityEventTypes eCityEvent) const;
 	int getEventBuilding() const;
 	int getEventBuildingDestruction() const;
@@ -3640,6 +3643,8 @@ public:
 	bool isCounterspyBlockSapCity() const;
 	int getCityDefenseModifierBase() const;
 	int getCityDefenseModifier() const;
+	int getSpyIdentificationChanceReductionGlobal() const;
+	int getSpySecurityModifier() const;
 	EventChoiceTypes GetTriggerPlayerEventChoice() const;
 
 	//Filters
@@ -3705,6 +3710,7 @@ public:
 	virtual bool CacheResults(Database::Results& kResults, CvDatabaseUtility& kUtility);
 
 protected:
+	CvString m_strDescription;
 	int m_iEventBuilding;
 	int m_iEventBuildingDestruction;
 	int m_iEventDuration;
@@ -3784,6 +3790,8 @@ protected:
 	bool m_bCounterspyBlockSapCity;
 	int m_iCityDefenseModifierBase;
 	int m_iCityDefenseModifier;
+	int m_iSpyIdentificationChanceReductionGlobal;
+	int m_iSpySecurityModifier;
 
 	//Filters
 	int m_iPrereqTech;

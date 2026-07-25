@@ -952,8 +952,7 @@
 			<Help>TXT_KEY_BUILDING_SHOPPING_MALL_HELP</Help>
 			<Strategy>TXT_KEY_BUILDING_SHOPPING_MALL_STRATEGY</Strategy>
 			<PrereqTech>TECH_REFRIGERATION</PrereqTech>
-			<TradeRouteRecipientBonus>2</TradeRouteRecipientBonus>
-			<TradeRouteTargetBonus>2</TradeRouteTargetBonus>
+			<LocalFranchiseChance>5</LocalFranchiseChance>
 			<IconAtlas>CORPORATION_ATLAS_VP</IconAtlas>
 			<PortraitIndex>36</PortraitIndex>
 		</Row>
@@ -2604,6 +2603,19 @@
 			<IsReformation>true</IsReformation>
 			<IconAtlas>BUILDING_ATLAS_VP_2</IconAtlas>
 			<PortraitIndex>53</PortraitIndex>
+			<Happiness>2</Happiness>
+		</Row>
+		<!-- Heavenly Grotto -->
+		<Row>
+			<Type>BUILDING_HEAVENLY_GROTTO</Type>
+			<BuildingClass>BUILDINGCLASS_HEAVENLY_GROTTO</BuildingClass>
+			<Description>TXT_KEY_BUILDING_HEAVENLY_GROTTO</Description>
+			<Civilopedia>TXT_KEY_BUILDING_HEAVENLY_GROTTO_TEXT</Civilopedia>
+			<Help>TXT_KEY_BUILDING_HEAVENLY_GROTTO_HELP</Help>
+			<Strategy>TXT_KEY_BUILDING_HEAVENLY_GROTTO_STRATEGY</Strategy>
+			<IsReformation>true</IsReformation>
+			<IconAtlas>BUILDING_ATLAS_VP_2</IconAtlas>
+			<PortraitIndex>52</PortraitIndex>
 		</Row>
 		<!-- Holy Council -->
 		<Row>
@@ -2641,19 +2653,6 @@
 			<IsReformation>true</IsReformation>
 			<IconAtlas>BUILDING_ATLAS_VP_2</IconAtlas>
 			<PortraitIndex>45</PortraitIndex>
-		</Row>
-		<!-- Heavenly Grotto -->
-		<Row>
-			<Type>BUILDING_HEAVENLY_GROTTO</Type>
-			<BuildingClass>BUILDINGCLASS_HEAVENLY_GROTTO</BuildingClass>
-			<Description>TXT_KEY_BUILDING_HEAVENLY_GROTTO</Description>
-			<Civilopedia>TXT_KEY_BUILDING_HEAVENLY_GROTTO_TEXT</Civilopedia>
-			<Help>TXT_KEY_BUILDING_HEAVENLY_GROTTO_HELP</Help>
-			<Strategy>TXT_KEY_BUILDING_HEAVENLY_GROTTO_STRATEGY</Strategy>
-			<IsReformation>true</IsReformation>
-			<IconAtlas>BUILDING_ATLAS_VP_2</IconAtlas>
-			<PortraitIndex>52</PortraitIndex>
-			<Happiness>2</Happiness>
 		</Row>
 		<!-- Corporations Headquarters -->
 		<Row>

@@ -485,7 +485,7 @@ public:
 	static int CalcExperienceTimes100ForConvert(PlayerTypes eFromPlayer, PlayerTypes eToPlayer, int iExperienceTimes100);
 	void grantExperienceFromLostPromotions(int iNumLost);
 
-	void convert(CvUnit* pUnit, bool bIsUpgrade);
+	void convert(CvUnit* pUnit, bool bIsUpgrade, bool bIsGift);
 	void kill(bool bDelay, PlayerTypes ePlayer = NO_PLAYER);
 
 	void doTurn();
@@ -2278,7 +2278,7 @@ public:
 	bool CanSafelyReachInXTurns(const CvPlot* pTarget, int iTurns);
 	void ClearPathCache();
 
-	bool	getCaptureDefinition(CvUnitCaptureDefinition* pkCaptureDef, PlayerTypes eCapturingPlayer = NO_PLAYER);
+	bool getCaptureDefinition(CvUnitCaptureDefinition* pkCaptureDef, PlayerTypes eCapturingPlayer = NO_PLAYER);
 	static CvUnit* createCaptureUnit(const CvUnitCaptureDefinition& kCaptureDef, bool ForcedCapture = false);
 
 	void DoGreatPersonSpawnBonus(CvCity* pSpawnCity);

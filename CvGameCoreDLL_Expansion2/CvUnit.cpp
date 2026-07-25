@@ -577,7 +577,7 @@ void CvUnit::initWithNameOffset(int iID, UnitTypes eUnit, int iNameOffset, UnitA
 		if (eReason == REASON_UPGRADE && pPassUnit != NULL && pPassUnit->IsPromotionEverObtained(ePromotion))
 		{
 			SetPromotionEverObtained(ePromotion, true);
-	}
+		}
 		if(getUnitInfo().GetFreePromotions(iI))
 		{
 			if(GC.getPromotionInfo(ePromotion)->IsHoveringUnit())
@@ -1915,7 +1915,7 @@ void CvUnit::grantExperienceFromLostPromotions(int iNumLost)
 }
 
 //	--------------------------------------------------------------------------------
-void CvUnit::convert(CvUnit* pUnit, bool bIsUpgrade)
+void CvUnit::convert(CvUnit* pUnit, bool bIsUpgrade, bool bIsGift)
 {
 	VALIDATE_OBJECT();
 	IDInfo* pUnitNode = NULL;
@@ -1943,7 +1943,7 @@ void CvUnit::convert(CvUnit* pUnit, bool bIsUpgrade)
 			}
 
 			// Old unit has the promotion
-			if (pUnit->isHasPromotion(ePromotion) && !pkPromotionInfo->IsLostWithUpgrade())
+			if (pUnit->isHasPromotion(ePromotion) && (!bIsUpgrade || !pkPromotionInfo->IsLostWithUpgrade()) && (!bIsGift || !pkPromotionInfo->IsLostOnGifting()))
 			{
 				bGivePromotion = true;
 			}
@@ -2371,7 +2371,7 @@ void CvUnit::kill(bool bDelay, PlayerTypes ePlayer /*= NO_PLAYER*/)
 						}
 					}
 					// Unit was killed in our master's territory
-					else if (GET_PLAYER(eUnitOwner).GetDiplomacyAI()->IsPlayerValid(pPlot->getOwner()) && GET_PLAYER(eUnitOwner).GetDiplomacyAI()->IsVassal(pPlot->getOwner()))
+					else if (pPlot->getOwner() != NO_PLAYER && GET_PLAYER(eUnitOwner).GetDiplomacyAI()->IsPlayerValid(pPlot->getOwner()) && GET_PLAYER(eUnitOwner).GetDiplomacyAI()->IsVassal(pPlot->getOwner()))
 					{
 						// Penalize the master whose territory we're in
 						if (iCivValue > 0)
@@ -2783,8 +2783,9 @@ bool CvUnit::getCaptureDefinition(CvUnitCaptureDefinition* pkCaptureDef, PlayerT
 		kCaptureDef.bAsIs = true;
 		kCaptureDef.eCaptureUnitType = getUnitType();
 	}
+		
 	// Barbs captured this unit, or a player capturing this unit from the barbs
-	else if(isBarbarian() || (kCaptureDef.eCapturingPlayer != NO_PLAYER && GET_PLAYER(kCaptureDef.eCapturingPlayer).isBarbarian()))
+	else if (isBarbarian() || (kCaptureDef.eCapturingPlayer != NO_PLAYER && GET_PLAYER(kCaptureDef.eCapturingPlayer).isBarbarian()))
 	{
 		// Must be able to capture this unit normally... don't want the barbs picking up Workboats, Generals, etc.
 		if(kCaptureDef.eCapturingPlayer != NO_PLAYER && getCaptureUnitType(kCaptureDef.eCapturingPlayer) != NO_UNIT)
@@ -2800,7 +2801,7 @@ bool CvUnit::getCaptureDefinition(CvUnitCaptureDefinition* pkCaptureDef, PlayerT
 	}
 
 	CvPlot* pkPlot = plot();
-	if(pkPlot)
+	if (pkPlot)
 	{
 		kCaptureDef.iX = pkPlot->getX();
 		kCaptureDef.iY = pkPlot->getY();
@@ -4793,9 +4794,9 @@ bool CvUnit::canEnterTerrain(const CvPlot& enterPlot, int iMoveFlags) const
 		{
 			return false;
 		}
-		else if (kPlayer.isMinorCiv() && enterPlot.getRevealedImprovementType(getTeam()) == GD_INT_GET(BARBARIAN_CAMP_IMPROVEMENT))
+		else if (MOD_BALANCE_MINORS_CANNOT_ENTER_ENCAMPMENTS && kPlayer.isMinorCiv() && enterPlot.getRevealedImprovementType(getTeam()) == GD_INT_GET(BARBARIAN_CAMP_IMPROVEMENT))
 		{
-			//vp special: minors cannot enter/clear barbarian camps
+			//minors cannot enter/clear barbarian camps
 			return false;
 		}
 
@@ -6234,7 +6235,7 @@ void CvUnit::gift(bool bTestTransport)
 
 	if (pGiftUnit != NULL)
 	{
-		pGiftUnit->convert(this, false);
+		pGiftUnit->convert(this, false, true);
 		pGiftUnit->setupGraphical();
 
 		pGiftUnit->GetReligionDataMutable()->SetReligion(GetReligionData()->GetReligion());
@@ -14161,7 +14162,7 @@ bool CvUnit::CanUpgradeTo(UnitTypes eUpgradeUnitType, bool bOnlyTestVisible, CvS
 		}
 
 		// Player must have enough Gold
-		if (kOwner.GetTreasury()->GetGold() < upgradePrice(eUpgradeUnitType) && !kOwner.isMinorCiv())
+		if ((upgradePrice(eUpgradeUnitType) != 0 && kOwner.GetTreasury()->GetGold() < upgradePrice(eUpgradeUnitType)) && !kOwner.isMinorCiv())
 		{
 			if (toolTipSink == NULL)
 				return false;
@@ -14339,6 +14340,10 @@ int CvUnit::upgradePrice(UnitTypes eUnit) const
 	VALIDATE_OBJECT();
 	ASSERT(eUnit > NO_UNIT && eUnit < GC.getNumUnitInfos(), "eUnit is not a valid unit type");
 
+	// does the discount make the unit upgrade free?
+	if (getUpgradeDiscount() == 100)
+		return 0;
+
 	CvPlayer& kPlayer = GET_PLAYER(getOwner());
 
 	// Player-specific upgrade cost
@@ -14353,6 +14358,7 @@ int CvUnit::upgradePrice(UnitTypes eUnit) const
 	iPrice /= iDivisor;
 	iPrice *= iDivisor;
 
+	// regular unit upgrade prices must be non-zero
 	return max(iDivisor, iPrice);
 }
 
@@ -14438,7 +14444,7 @@ CvUnit* CvUnit::DoUpgradeTo(UnitTypes eUnitType, bool bFree)
 			pNewUnit->AssignToSquad(GetSquadNumber());
 		}
 
-		pNewUnit->convert(this, true);
+		pNewUnit->convert(this, true, false);
 		pNewUnit->setupGraphical();
 		
 		// Can't move after upgrading
@@ -14614,17 +14620,21 @@ bool CvUnit::isNativeDomain(const CvPlot* pPlot) const
 	case DOMAIN_AIR:
 		return true;
 	case DOMAIN_SEA:
+	{
+		if (pPlot->isWater())
+			return true;
+
+		if (!MOD_CORE_NO_NAVAL_RANGED_ATTACKS_FROM_CITIES && pPlot->isCity())
+			return true;
+
 		if (!MOD_CORE_NO_NAVAL_RANGED_ATTACKS_FROM_CANALS)
 		{
-			if (pPlot->isWater() || pPlot->isCity())
-				return true;
-			else
-			{
-				ImprovementTypes eImprovement = pPlot->getImprovementType();
-				return eImprovement != NO_IMPROVEMENT && GC.getImprovementInfo(eImprovement)->IsMakesPassable();
-			}
+			ImprovementTypes eImprovement = pPlot->getImprovementType();
+			return eImprovement != NO_IMPROVEMENT && GC.getImprovementInfo(eImprovement)->IsMakesPassable();
 		}
-		return (pPlot->isWater());
+
+		return false;
+	}
 	case DOMAIN_HOVER:
 		return true;
 	case DOMAIN_IMMOBILE:
@@ -20410,46 +20420,50 @@ void CvUnit::setXY(int iX, int iY, bool bGroup, bool bUpdate, bool bShow, bool b
 											!bDoEvade )
 										{
 											bDoCapture = true;
-
-											Localization::String strMessage;
-											Localization::String strSummary;
-											if(isBarbarian())
-											{
-												strMessage = Localization::Lookup("TXT_KEY_UNIT_CAPTURED_BARBS_DETAILED");
-												strMessage << pLoopUnit->getUnitInfo().GetTextKey();
-												strSummary = Localization::Lookup("TXT_KEY_UNIT_CAPTURED_BARBS");
-											}
-											else
-											{
-												strMessage = Localization::Lookup("TXT_KEY_UNIT_CAPTURED_DETAILED");
-												strMessage << pLoopUnit->getUnitInfo().GetTextKey() << kPlayer.getNameKey();
-												strSummary = Localization::Lookup("TXT_KEY_UNIT_CAPTURED");
-											}
 										}
-										// Unit was killed instead
-
-										if (MOD_EVENTS_UNIT_CAPTURE) {
+										
+										if (MOD_EVENTS_UNIT_CAPTURE)
 											GAMEEVENTINVOKE_HOOK(GAMEEVENT_UnitCaptured, getOwner(), GetID(), pLoopUnit->getOwner(), pLoopUnit->GetID(), !bDoCapture, 0);
-										}
+
 										if (!bDoEvade)
 										{
-											if (!bDoCapture)
+											Localization::String strMessage;
+											Localization::String strSummary;
+											if (bDoCapture)
+											{
+												if (isBarbarian())
+												{
+													strMessage = Localization::Lookup("TXT_KEY_UNIT_CAPTURED_BARBS_DETAILED");
+													strMessage << pLoopUnit->getUnitInfo().GetTextKey();
+													strSummary = Localization::Lookup("TXT_KEY_UNIT_CAPTURED_BARBS");
+												}
+												else
+												{
+													strMessage = Localization::Lookup("TXT_KEY_UNIT_CAPTURED_DETAILED");
+													strMessage << pLoopUnit->getUnitInfo().GetTextKey() << kPlayer.getNameKey();
+													strSummary = Localization::Lookup("TXT_KEY_UNIT_CAPTURED");
+												}
+											}
+											// Unit was killed instead
+											else
 											{
 												CvString strBuffer = GetLocalizedText("TXT_KEY_MISC_YOU_UNIT_DESTROYED_ENEMY", getNameKey(), 0, pLoopUnit->getNameKey());
 												DLLUI->AddUnitMessage(0, GetIDInfo(), getOwner(), true, /*10*/ GD_INT_GET(EVENT_MESSAGE_TIME), strBuffer/*, GC.getEraInfo(GC.getGame().getCurrentEra())->getAudioUnitVictoryScript(), MESSAGE_TYPE_INFO, NULL, (ColorTypes)GC.getInfoTypeForString("COLOR_GREEN"), pkTargetPlot->getX(), pkTargetPlot->getY()*/);
 												if (MOD_WH_MILITARY_LOG)
 													MILITARYLOG(getOwner(), strBuffer.c_str(), plot(), pLoopUnit->getOwner());
+												
+												Localization::String strMessage = Localization::Lookup("TXT_KEY_UNIT_LOST");
+												Localization::String strSummary = strMessage;
 											}
 
-											kPlayer.DoYieldsFromKill(this, pLoopUnit);
-											kPlayer.DoUnitKilledCombat(this, pLoopUnit->getOwner(), pLoopUnit->getUnitType());
 											CvNotifications* pNotification = GET_PLAYER(pLoopUnit->getOwner()).GetNotifications();
 											if (pNotification)
 											{
-												Localization::String strMessage = Localization::Lookup("TXT_KEY_UNIT_LOST");
-												Localization::String strSummary = strMessage;
 												pNotification->Add(NOTIFICATION_UNIT_DIED, strMessage.toUTF8(), strSummary.toUTF8(), pLoopUnit->getX(), pLoopUnit->getY(), (int)pLoopUnit->getUnitType(), pLoopUnit->getOwner());
 											}
+											
+											kPlayer.DoYieldsFromKill(this, pLoopUnit);
+											kPlayer.DoUnitKilledCombat(this, pLoopUnit->getOwner(), pLoopUnit->getUnitType());
 
 											// If we're capturing the unit, we want to delay the capture, else as the unit is converted to our side, it will be the first unit on our
 											// side in the plot and can end up taking over a city, rather than the advancing unit
@@ -24558,7 +24572,7 @@ void CvUnit::DoConvertOnDamageThreshold(const CvPlot* pPlot)
 					{
 						eAIType = pkUnitType->GetDefaultUnitAIType();
 						CvUnit* pNewUnit = GET_PLAYER(getOwner()).initUnit(getConvertDamageOrFullHPUnit(), getX(), getY(), eAIType);
-						pNewUnit->convert(this, true);
+						pNewUnit->convert(this, true, false);
 						pNewUnit->finishMoves();
 						pNewUnit->restoreFullMoves();
 					}
@@ -24578,7 +24592,7 @@ void CvUnit::DoConvertOnDamageThreshold(const CvPlot* pPlot)
 					{
 						eAIType = pkUnitType->GetDefaultUnitAIType();
 						CvUnit* pNewUnit = GET_PLAYER(getOwner()).initUnit(getConvertDamageOrFullHPUnit(), getX(), getY(), eAIType);
-						pNewUnit->convert(this, true);
+						pNewUnit->convert(this, true, false);
 						pNewUnit->finishMoves();
 						pNewUnit->restoreFullMoves();
 					}
@@ -24618,7 +24632,7 @@ void CvUnit::DoConvertEnemyUnitToBarbarian(const CvPlot* pPlot)
 							{
 								CvPlayer* pBarbPlayer = &GET_PLAYER(BARBARIAN_PLAYER);
 								pConvertUnit = pBarbPlayer->initUnit(pAdjacentUnit->getUnitType(), pAdjacentUnit->getX(), pAdjacentUnit->getY(), pAdjacentUnit->AI_getUnitAIType(), REASON_CONVERT, true /*bNoMove*/, false);
-								pConvertUnit->convert(pAdjacentUnit, false);
+								pConvertUnit->convert(pAdjacentUnit, false, false);
 								pConvertUnit->setupGraphical();
 								pConvertUnit->setDamage(iExistingDamage, BARBARIAN_PLAYER);
 								pConvertUnit->finishMoves();
@@ -24654,7 +24668,7 @@ void CvUnit::DoConvertEnemyUnitToBarbarian(const CvPlot* pPlot)
 
 										CvPlayer* pBarbPlayer = &GET_PLAYER(BARBARIAN_PLAYER);
 										pConvertUnit = pBarbPlayer->initUnit(getUnitType(), getX(), getY(), AI_getUnitAIType(), NO_DIRECTION, true /*bNoMove, false);
-										pConvertUnit->convert(this, false);
+										pConvertUnit->convert(this, false, false);
 										pConvertUnit->setupGraphical();
 										pConvertUnit->setDamage(iExistingDamage, BARBARIAN_PLAYER);
 										pConvertUnit->finishMoves();
@@ -24706,7 +24720,7 @@ void CvUnit::DoConvertReligiousUnitsToMilitary(const CvPlot* pPlot)
 			return;
 
 		CvUnit* pConvertUnit = kPlayer.initUnit(eUnit, this->getX(), this->getY(), NO_UNITAI, REASON_CONVERT, true);
-		pConvertUnit->convert(this, false);
+		pConvertUnit->convert(this, false, false);
 		CvNotifications* pNotifications = kPlayer.GetNotifications();
 		if (pNotifications)
 		{

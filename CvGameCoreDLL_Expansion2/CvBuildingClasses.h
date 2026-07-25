@@ -145,6 +145,9 @@ public:
 	int GetNumPoliciesNeeded() const;
 	int GrantsRandomResourceTerritory() const;
 	bool IsPuppetPurchaseOverride() const;
+	bool IsRequiresPuppet() const;
+	int GetRequiredFranchises() const;
+	int GetRequiredPercentGlobalMonopolies() const;
 	bool IsAllowsPuppetPurchase() const;
 	bool IsNoStarvationNonSpecialist() const;
 	int GetMinimumFood() const;
@@ -464,6 +467,10 @@ public:
 	int GetYieldChangePerGoldenAgeCap(int i) const;
 	int* GetYieldChangePerGoldenAgeCapArray() const;
 
+	int GetYieldModifierFromDistanceToCapitalBase(int i) const;
+	int GetYieldModifierFromDistanceToCapitalFalloff(int i) const;
+	int GetYieldModifierFromDistanceToCapitalLimit(int i) const;
+
 	int GetYieldChangesPerLocalTheme(int i) const;
 
 	int GetYieldFromUnitGiftGlobal(int i) const;
@@ -609,7 +616,6 @@ public:
 	int GetResourceQuantity(int i) const;
 	int GetResourceCultureChange(int i) const;
 	int GetResourceFaithChange(int i) const;
-	int GetProductionTraits(int i) const;
 	int GetPrereqNumOfBuildingClass(int i) const;
 	int GetFlavorValue(int i) const;
 	uint GetLocalResourceAndSize() const;
@@ -713,6 +719,8 @@ public:
 	bool IsFaithPurchaseOnly() const;
 	int GetBasePressureModGlobal() const;
 
+	int GetLocalFranchiseChance() const;
+
 private:
 	int m_iBuildingClassType;
 	const CvBuildingClassInfo* m_pkBuildingClassInfo;
@@ -734,6 +742,9 @@ private:
 	int m_iResourceType;
 	int m_iGrantsRandomResourceTerritory;
 	bool m_bPuppetPurchaseOverride;
+	bool m_bRequiresPuppet;
+	int m_iRequiredFranchises;
+	int m_iRequiredPercentGlobalMonopolies;
 	bool m_bAllowsPuppetPurchase;
 	bool m_bNoStarvationNonSpecialist;
 	int m_iMinimumFood;
@@ -994,6 +1005,8 @@ private:
 	int m_iBasePressureModGlobal;
 	int m_iDefensePerXWonder;
 
+	int m_iLocalFranchiseChance;
+
 	CvString m_strArtDefineTag;
 	CvString m_strWonderSplashAudio;
 	CvString m_strThemingBonusHelp;
@@ -1006,7 +1019,6 @@ private:
 	int* m_piResourceQuantity;
 	int* m_piResourceCultureChanges;
 	int* m_piResourceFaithChanges;
-	int* m_piProductionTraits;
 	int* m_piSeaPlotYieldChange;
 	int* m_piRiverPlotYieldChange;
 	int* m_piLakePlotYieldChange;
@@ -1028,6 +1040,9 @@ private:
 	int* m_piYieldFromGoldenAgeStart;
 	int* m_piYieldChangePerGoldenAge;
 	int* m_piYieldChangePerGoldenAgeCap;
+	int* m_piYieldModifierFromDistanceToCapitalBase;
+	int* m_piYieldModifierFromDistanceToCapitalFalloff;
+	int* m_piYieldModifierFromDistanceToCapitalLimit;
 	int* m_piGoldenAgeYieldMod;
 	int* m_piYieldChangesPerLocalTheme;
 	int* m_piYieldFromUnitGiftGlobal;

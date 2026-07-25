@@ -33,6 +33,7 @@
 #include "CvAdvisorRecommender.h"
 #include "CvWorldBuilderMapLoader.h"
 #include "CvTypes.h"
+#include "SqliteLoggerRegistrations.h"
 #include "CvDllNetMessageExt.h"
 
 #include "cvStopWatch.h"
@@ -40,6 +41,14 @@
 
 #include "CvDLLUtilDefines.h"
 #include "CvAchievementUnlocker.h"
+
+// For CoCreateGuid (game UUID generation). Declared directly rather than via <objbase.h>,
+// which pulls in ole2.h/oleidl.h and conflicts with the SDK headers used by this project.
+// CoCreateGuid is exported from ole32.dll (ole32.lib is already linked).
+extern "C" __declspec(dllimport) long __stdcall CoCreateGuid(GUID* pguid);
+
+// SQLite statistics logging
+#include "SqliteLogger.h"
 
 // interface uses
 #include "ICvDLLUserInterface.h"
@@ -192,6 +201,22 @@ void CvGame::init(HandicapTypes eHandicap)
 	m_mapRand.init(CvPreGame::mapRandomSeed() % 73637381);
 	m_jonRand.init(CvPreGame::syncRandomSeed() % 52319761);
 
+	// Generate a unique identifier for this game. This is preserved across save/load
+	// so that statistics logged for the same game can always be correlated.
+	{
+		GUID kGuid;
+		if (CoCreateGuid(&kGuid) == S_OK)
+		{
+			m_strGameId.Format("%08lX-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X",
+				kGuid.Data1, kGuid.Data2, kGuid.Data3,
+				kGuid.Data4[0], kGuid.Data4[1], kGuid.Data4[2], kGuid.Data4[3],
+				kGuid.Data4[4], kGuid.Data4[5], kGuid.Data4[6], kGuid.Data4[7]);
+		}
+	}
+
+	// Resolve the compact integer id for this game's UUID in the local stats database.
+	// stats.db compact integer lookup is a NO-OP when MOD_SQLITE_LOGGING is not enabled
+	resolveGameDatabaseId();
 	SetClosestCityMapDirty();
 
 	//--------------------------------
@@ -1229,6 +1254,8 @@ void CvGame::uninit()
 	m_iLastTurnCSSurrendered = 0;
 
 	m_strScriptData = "";
+	m_strGameId = "";
+	m_intGameId = 0;
 	m_iEarliestBarbarianReleaseTurn = 0;
 
 	m_iLastMouseoverUnitID = 0;
@@ -1254,9 +1281,28 @@ void CvGame::reset(HandicapTypes eHandicap, bool bConstructorCall)
 
 	if(DeleteFileW(wstrDatabasePath.c_str()) == FALSE)
 	{
-		if(GetLastError() != ERROR_FILE_NOT_FOUND)
+		DWORD dwDeleteError = GetLastError();
+		if(dwDeleteError != ERROR_FILE_NOT_FOUND)
 		{
-			ASSERT(false, CvString::format("Warning! Cannot delete existing Civ5SavedGameDatabase at '%s'! Does something have it opened?", strUTF8DatabasePath.c_str()).c_str());
+			const char* szReason;
+			switch(dwDeleteError)
+			{
+			case ERROR_SHARING_VIOLATION:
+			case ERROR_LOCK_VIOLATION:
+				szReason = "the file is currently open in another process (another game instance, antivirus, or a backup/sync tool)";
+				break;
+			case ERROR_ACCESS_DENIED:
+				szReason = "access was denied (the file may be read-only or the cache folder permissions are restrictive)";
+				break;
+			case ERROR_PATH_NOT_FOUND:
+				szReason = "the containing cache folder does not exist";
+				break;
+			default:
+				szReason = "of an unrecognized error";
+				break;
+			}
+
+			ASSERT(false, CvString::format("Warning! Cannot delete existing Civ5SavedGameDatabase at '%s' because %s (Win32 error %lu).", strUTF8DatabasePath.c_str(), szReason, dwDeleteError).c_str());
 		}
 	}
 
@@ -4605,9 +4651,9 @@ void CvGame::UpdateGameEra()
 			iCount++;
 		}
 	}
-	if (iCount >= 0)
+	if (iCount > 0)
 	{
-		int iRoundedEra = int(fEra / (max(1, iCount)) + 0.5f);
+		int iRoundedEra = int(fEra / iCount + 0.5f);
 		m_eGameEra = (EraTypes)iRoundedEra;
 	}
 	else
@@ -4734,6 +4780,38 @@ int CvGame::getNumSequentialHumans(PlayerTypes ignorePlayer)
 		}
 	}
 	return seqHumans;
+}
+
+//	------------------------------------------------------------------------------------------------
+const CvString& CvGame::getGameId() const
+{
+	return m_strGameId;
+}
+
+//	------------------------------------------------------------------------------------------------
+int CvGame::getGameDatabaseId() const
+{
+	return m_intGameId;
+}
+
+//	------------------------------------------------------------------------------------------------
+void CvGame::resolveGameDatabaseId()
+{
+	m_intGameId = 0;
+
+	if (m_strGameId.IsEmpty())
+		return;
+
+	// Strip the dashes from the UUID string to obtain a 32-char uppercase hex representation.
+	std::string strHex;
+	strHex.reserve(32);
+	for (const char* p = m_strGameId.c_str(); *p != '\0'; ++p)
+	{
+		if (*p != '-')
+			strHex += *p;
+	}
+
+	m_intGameId = GET_SQLITE_LOGGER().ResolveGameId(strHex);
 }
 
 //	------------------------------------------------------------------------------------------------
@@ -7477,6 +7555,30 @@ void CvGame::LogTurnScores() const
 
 void CvGame::LogGameResult(const char* victoryTypeText, const char* victoryCivText) const
 {
+	// Upon game completion, log each civ's final score, the winning civ, and the victory type to the SQLite stats database
+	if (MOD_SQLITE_LOGGING)
+	{
+		RegisterGameResultTable();
+
+		for (int iPlayerLoop = 0; iPlayerLoop < MAX_MAJOR_CIVS; iPlayerLoop++)
+		{
+			PlayerTypes eLoopPlayer = (PlayerTypes)iPlayerLoop;
+			CvPlayer& eLoopCvPlayer = GET_PLAYER(eLoopPlayer);
+			if (eLoopPlayer != NO_PLAYER && eLoopCvPlayer.isEverAlive() && !eLoopCvPlayer.isMinorCiv() && !eLoopCvPlayer.isBarbarian())
+			{
+				const bool bIsWinningTeam = (eLoopCvPlayer.getTeam() == getWinner());
+				const int iScore = GET_TEAM(eLoopCvPlayer.getTeam()).GetScore();
+				const char* szCiv = eLoopCvPlayer.getCivilizationShortDescription();
+				const char* szVictoryTypeForCiv = bIsWinningTeam ? victoryTypeText : "";
+				GET_SQLITE_LOGGER().BeginLogRow("GameResult")
+					.bind(szCiv)
+					.bind(iScore)
+					.bind(szVictoryTypeForCiv)
+					.execute();
+			}
+		}
+	}
+
 	if (GC.getLogging() && GC.getAILogging())
 	{
 		CvString header = "Turn, VictoryType, VictoryCiv";
@@ -10855,6 +10957,8 @@ void CvGame::Serialize(Game& game, Visitor& visitor)
 
 	visitor(*game.m_pGameCorporations);
 	visitor(*game.m_pGameContracts);
+
+	visitor(game.m_strGameId);
 }
 
 //	--------------------------------------------------------------------------------
@@ -10897,6 +11001,9 @@ void CvGame::Read(FDataStream& kStream)
 
 	CvStreamLoadVisitor serialVisitor(kStream);
 	Serialize(*this, serialVisitor);
+
+	// m_intGameId is not serialized; recompute it from the loaded string id for this machine's stats.db.
+	resolveGameDatabaseId();
 
 	// Save game database comes last
 	readSaveGameDB(kStream);
@@ -12440,6 +12547,231 @@ void CvGame::LogMapState() const
 	pLog->Msg(outputJson);
 }
 
+void CvGame::LogMapPlotsState() const
+{
+	if (!MOD_SQLITE_LOGGING)
+		return;
+
+	RegisterMapPlotsStateTable();
+
+	CvMap& kMap = GC.getMap();
+	const int iNumPlots = kMap.numPlots();
+
+	SqliteLogger::BatchWriter kBatch = GET_SQLITE_LOGGER().BeginLogBatch("MapPlotsState");
+
+	for (int i = 0; i < iNumPlots; i++)
+	{
+		CvPlot* pPlot = kMap.plotByIndexUnchecked(i);
+
+		const CvCity* pCity = pPlot->getPlotCity();
+		const PlayerTypes eOwner = pPlot->getOwner();
+		const RouteTypes eRoute = pPlot->getRouteType();
+
+		const bool bHasCity = (pCity != NULL);
+		const bool bHasRoute = (eRoute != NO_ROUTE);
+		const bool bOwned = (eOwner != NO_PLAYER);
+		const bool bIsLastPlot = (i == iNumPlots - 1);
+
+		// Skip empty plots (no city, no route, unowned) to keep the table compact. The final plot is
+		// always written so the map dimensions (and thus the omitted empty plots) can be inferred.
+		if (!bHasCity && !bHasRoute && !bOwned && !bIsLastPlot)
+			continue;
+
+		int iRouteType = 255;
+		switch (eRoute)
+		{
+		case ROUTE_ROAD:
+			iRouteType = 0;
+			break;
+		case ROUTE_RAILROAD:
+			iRouteType = 1;
+			break;
+		default:
+			iRouteType = 255;
+		}
+
+		// getName() returns a CvString by value, so keep it alive for the duration of the bind below.
+		CvString strCityName;
+		if (bHasCity)
+			strCityName = pCity->getName();
+
+		const char* szOwner = bOwned ? GET_PLAYER(eOwner).getCivilizationShortDescription() : "";
+
+		kBatch.BeginLogRow()
+			.bind(pPlot->getX())
+			.bind(pPlot->getY())
+			.bind(strCityName.c_str())
+			.bind(szOwner)
+			.bind(iRouteType)
+			.addRowToBatch();
+	}
+
+	kBatch.flush();
+}
+
+void CvGame::LogMapUnitsState() const
+{
+	if (!MOD_SQLITE_LOGGING)
+		return;
+
+	RegisterMapUnitsStateTable();
+
+	SqliteLogger::BatchWriter kBatch = GET_SQLITE_LOGGER().BeginLogBatch("MapUnitsState");
+
+	for (int iPlayer = 0; iPlayer < MAX_MAJOR_CIVS; iPlayer++)
+	{
+		const CvPlayer& kPlayer = GET_PLAYER(static_cast<PlayerTypes>(iPlayer));
+		if (!kPlayer.isAlive())
+			continue;
+
+		const char* szOwner = kPlayer.getCivilizationShortDescription();
+
+		int iLoop = 0;
+		for (const CvUnit* pLoopUnit = kPlayer.firstUnit(&iLoop); pLoopUnit != NULL; pLoopUnit = kPlayer.nextUnit(&iLoop))
+		{
+			// getNameKey() -> localized human-readable type name ("Spearman", "Bazooka").
+			// GetLocalizedText returns a CvString by value; keep it alive for the bind below.
+			CvString strUnitName = GetLocalizedText(pLoopUnit->getNameKey());
+
+			kBatch.BeginLogRow()
+				.bind(szOwner)                                                // owner
+				.bind(pLoopUnit->getX())                                      // plotX
+				.bind(pLoopUnit->getY())                                      // plotY
+				.bind(pLoopUnit->GetID())                                     // unitID
+				.bind(strUnitName.c_str())                                    // unitName
+				.bind(pLoopUnit->GetMaxHitPoints())                           // unitMaxHP
+				.bind(pLoopUnit->GetMaxHitPoints() - pLoopUnit->getDamage())  // unitCurrHP
+				.addRowToBatch();
+		}
+	}
+
+	kBatch.flush();   // REQUIRED: BatchWriter discards buffered rows if not flushed before scope exit
+}
+
+//	--------------------------------------------------------------------------------
+// Per-turn snapshot of which era each major civ is in: one batched row per alive major civ.
+void CvGame::LogCivTurnEra() const
+{
+	if (!MOD_SQLITE_LOGGING)
+		return;
+
+	RegisterCivTurnEraTable();
+
+	SqliteLogger::BatchWriter kBatch = GET_SQLITE_LOGGER().BeginLogBatch("civ_turn_era");
+
+	for (int iPlayer = 0; iPlayer < MAX_MAJOR_CIVS; iPlayer++)
+	{
+		const CvPlayer& kPlayer = GET_PLAYER(static_cast<PlayerTypes>(iPlayer));
+		if (!kPlayer.isAlive())
+			continue;
+
+		kBatch.BeginLogRow()
+			.bind(kPlayer.getCivilizationShortDescription())   // civ
+			.bind(static_cast<int>(kPlayer.GetCurrentEra()))   // era
+			.addRowToBatch();
+	}
+
+	kBatch.flush();
+}
+
+//	--------------------------------------------------------------------------------
+// Aggregated per-turn diplomacy / grand-strategy counts shared by the WorldState_Log.csv output and
+// the SQLite WorldStateLog mirror so the two code paths cannot drift apart.
+struct WorldStateLogCounts
+{
+	WorldStateLogCounts() :
+		iGSConquest(0), iGSSpaceship(0), iGSUN(0), iGSCulture(0),
+		iAlly(0), iFriend(0), iFavorable(0), iNeutral(0), iCompetitor(0), iEnemy(0), iUnforgivable(0),
+		iMajorWar(0), iMajorHostile(0), iMajorDeceptive(0), iMajorGuarded(0), iMajorAfraid(0), iMajorFriendly(0), iMajorNeutral(0),
+		iMinorIgnore(0), iMinorProtective(0), iMinorConquest(0), iMinorBully(0)
+	{
+	}
+
+	int iGSConquest, iGSSpaceship, iGSUN, iGSCulture;
+	int iAlly, iFriend, iFavorable, iNeutral, iCompetitor, iEnemy, iUnforgivable;
+	int iMajorWar, iMajorHostile, iMajorDeceptive, iMajorGuarded, iMajorAfraid, iMajorFriendly, iMajorNeutral;
+	int iMinorIgnore, iMinorProtective, iMinorConquest, iMinorBully;
+};
+
+//	--------------------------------------------------------------------------------
+static void ComputeWorldStateLogCounts(WorldStateLogCounts& kCounts)
+{
+	const AIGrandStrategyTypes eGSConquest = (AIGrandStrategyTypes)GC.getInfoTypeForString("AIGRANDSTRATEGY_CONQUEST");
+	const AIGrandStrategyTypes eGSSpaceship = (AIGrandStrategyTypes)GC.getInfoTypeForString("AIGRANDSTRATEGY_SPACESHIP");
+	const AIGrandStrategyTypes eGSUnitedNations = (AIGrandStrategyTypes)GC.getInfoTypeForString("AIGRANDSTRATEGY_UNITED_NATIONS");
+	const AIGrandStrategyTypes eGSCulture = (AIGrandStrategyTypes)GC.getInfoTypeForString("AIGRANDSTRATEGY_CULTURE");
+
+	// Loop through all Players
+	for (int iPlayerLoop = 0; iPlayerLoop < MAX_MAJOR_CIVS; iPlayerLoop++)
+	{
+		PlayerTypes eLoopPlayer = (PlayerTypes)iPlayerLoop;
+		CvPlayer* pPlayer = &GET_PLAYER(eLoopPlayer);
+
+		if (!pPlayer->isAlive())
+			continue;
+
+		const AIGrandStrategyTypes eGrandStrategy = pPlayer->GetGrandStrategyAI()->GetActiveGrandStrategy();
+		if (eGrandStrategy == eGSConquest)
+			kCounts.iGSConquest++;
+		else if (eGrandStrategy == eGSSpaceship)
+			kCounts.iGSSpaceship++;
+		else if (eGrandStrategy == eGSUnitedNations)
+			kCounts.iGSUN++;
+		else if (eGrandStrategy == eGSCulture)
+			kCounts.iGSCulture++;
+
+		// Loop through all players
+		for (int iPlayerLoop2 = 0; iPlayerLoop2 < MAX_CIV_PLAYERS; iPlayerLoop2++)
+		{
+			PlayerTypes eLoopPlayer2 = (PlayerTypes)iPlayerLoop2;
+
+			if (!GET_PLAYER(eLoopPlayer2).isAlive())
+				continue;
+
+			// Major
+			if (GET_PLAYER(eLoopPlayer2).isMajorCiv())
+			{
+				switch (pPlayer->GetDiplomacyAI()->GetCivOpinion(eLoopPlayer2))
+				{
+				case CIV_OPINION_ALLY:         kCounts.iAlly++;         break;
+				case CIV_OPINION_FRIEND:       kCounts.iFriend++;       break;
+				case CIV_OPINION_FAVORABLE:    kCounts.iFavorable++;    break;
+				case CIV_OPINION_NEUTRAL:      kCounts.iNeutral++;      break;
+				case CIV_OPINION_COMPETITOR:   kCounts.iCompetitor++;   break;
+				case CIV_OPINION_ENEMY:        kCounts.iEnemy++;        break;
+				case CIV_OPINION_UNFORGIVABLE: kCounts.iUnforgivable++; break;
+				}
+
+				switch (pPlayer->GetDiplomacyAI()->GetCivApproach(eLoopPlayer2))
+				{
+				case CIV_APPROACH_WAR:       kCounts.iMajorWar++;       break;
+				case CIV_APPROACH_HOSTILE:   kCounts.iMajorHostile++;   break;
+				case CIV_APPROACH_DECEPTIVE: kCounts.iMajorDeceptive++; break;
+				case CIV_APPROACH_GUARDED:   kCounts.iMajorGuarded++;   break;
+				case CIV_APPROACH_AFRAID:    kCounts.iMajorAfraid++;    break;
+				case CIV_APPROACH_NEUTRAL:   kCounts.iMajorNeutral++;   break;
+				case CIV_APPROACH_FRIENDLY:  kCounts.iMajorFriendly++;  break;
+				}
+			}
+			// Minor
+			else
+			{
+				switch (pPlayer->GetDiplomacyAI()->GetCivApproach(eLoopPlayer2))
+				{
+				case CIV_APPROACH_WAR:      kCounts.iMinorConquest++;   break;
+				case CIV_APPROACH_HOSTILE:  kCounts.iMinorBully++;      break;
+				case CIV_APPROACH_NEUTRAL:  kCounts.iMinorIgnore++;     break;
+				case CIV_APPROACH_FRIENDLY: kCounts.iMinorProtective++; break;
+				case CIV_APPROACH_DECEPTIVE:
+				case CIV_APPROACH_GUARDED:
+				case CIV_APPROACH_AFRAID:
+					UNREACHABLE();
+				}
+			}
+		}
+	}
+}
+
 //	--------------------------------------------------------------------------------
 void CvGame::LogGameState(bool bLogHeaders) const
 {
@@ -12461,147 +12793,8 @@ void CvGame::LogGameState(bool bLogHeaders) const
 		CvString strLogName = "WorldState_Log.csv";
 		FILogFile* pLog = LOGFILEMGR.GetLog(strLogName, FILogFile::kDontTimeStamp);
 
-		AIGrandStrategyTypes eGrandStrategy;
-		int iGSConquest = 0;
-		int iGSSpaceship = 0;
-		int iGSUN = 0;
-		int iGSCulture = 0;
-
-		int iAlly = 0;
-		int iFriend = 0;
-		int iFavorable = 0;
-		int iNeutral = 0;
-		int iCompetitor = 0;
-		int iEnemy = 0;
-		int iUnforgivable = 0;
-
-		int iMajorWar = 0;
-		int iMajorHostile = 0;
-		int iMajorDeceptive = 0;
-		int iMajorGuarded = 0;
-		int iMajorAfraid = 0;
-		int iMajorFriendly = 0;
-		int iMajorNeutral = 0;
-
-		int iMinorIgnore = 0;
-		int iMinorProtective = 0;
-		int iMinorConquest = 0;
-		int iMinorBully = 0;
-
-		// Loop through all Players
-		for (int iPlayerLoop = 0; iPlayerLoop < MAX_MAJOR_CIVS; iPlayerLoop++)
-		{
-			PlayerTypes eLoopPlayer = (PlayerTypes) iPlayerLoop;
-			CvPlayer* pPlayer = &GET_PLAYER(eLoopPlayer);
-
-			if (pPlayer->isAlive())
-			{
-				eGrandStrategy = pPlayer->GetGrandStrategyAI()->GetActiveGrandStrategy();
-
-				if (eGrandStrategy == GC.getInfoTypeForString("AIGRANDSTRATEGY_CONQUEST"))
-				{
-					iGSConquest++;
-				}
-				else if (eGrandStrategy == GC.getInfoTypeForString("AIGRANDSTRATEGY_SPACESHIP"))
-				{
-					iGSSpaceship++;
-				}
-				else if (eGrandStrategy == GC.getInfoTypeForString("AIGRANDSTRATEGY_UNITED_NATIONS"))
-				{
-					iGSUN++;
-				}
-				else if (eGrandStrategy == GC.getInfoTypeForString("AIGRANDSTRATEGY_CULTURE"))
-				{
-					iGSCulture++;
-				}
-
-				// Loop through all players
-				for (int iPlayerLoop2 = 0; iPlayerLoop2 < MAX_CIV_PLAYERS; iPlayerLoop2++)
-				{
-					PlayerTypes eLoopPlayer2 = (PlayerTypes) iPlayerLoop2;
-
-					if (GET_PLAYER(eLoopPlayer2).isAlive())
-					{
-						// Major
-						if (GET_PLAYER(eLoopPlayer2).isMajorCiv())
-						{
-							switch (pPlayer->GetDiplomacyAI()->GetCivOpinion(eLoopPlayer2))
-							{
-							case CIV_OPINION_ALLY:
-								iAlly++;
-								break;
-							case CIV_OPINION_FRIEND:
-								iFriend++;
-								break;
-							case CIV_OPINION_FAVORABLE:
-								iFavorable++;
-								break;
-							case CIV_OPINION_NEUTRAL:
-								iNeutral++;
-								break;
-							case CIV_OPINION_COMPETITOR:
-								iCompetitor++;
-								break;
-							case CIV_OPINION_ENEMY:
-								iEnemy++;
-								break;
-							case CIV_OPINION_UNFORGIVABLE:
-								iUnforgivable++;
-								break;
-							}
-
-							switch (pPlayer->GetDiplomacyAI()->GetCivApproach(eLoopPlayer2))
-							{
-							case CIV_APPROACH_WAR:
-								iMajorWar++;
-								break;
-							case CIV_APPROACH_HOSTILE:
-								iMajorHostile++;
-								break;
-							case CIV_APPROACH_DECEPTIVE:
-								iMajorDeceptive++;
-								break;
-							case CIV_APPROACH_GUARDED:
-								iMajorGuarded++;
-								break;
-							case CIV_APPROACH_AFRAID:
-								iMajorAfraid++;
-								break;
-							case CIV_APPROACH_NEUTRAL:
-								iMajorNeutral++;
-								break;
-							case CIV_APPROACH_FRIENDLY:
-								iMajorFriendly++;
-								break;
-							}
-						}
-						// Minor
-						else
-						{
-							switch (pPlayer->GetDiplomacyAI()->GetCivApproach(eLoopPlayer2))
-							{
-							case CIV_APPROACH_WAR:
-								iMinorConquest++;
-								break;
-							case CIV_APPROACH_HOSTILE:
-								iMinorBully++;
-								break;
-							case CIV_APPROACH_NEUTRAL:
-								iMinorIgnore++;
-								break;
-							case CIV_APPROACH_FRIENDLY:
-								iMinorProtective++;
-								break;
-							case CIV_APPROACH_DECEPTIVE:
-							case CIV_APPROACH_GUARDED:
-							case CIV_APPROACH_AFRAID:
-								UNREACHABLE();
-							}
-						}
-					}
-				}
-			}
-		}
+		WorldStateLogCounts kCounts;
+		ComputeWorldStateLogCounts(kCounts);
 
 		bool bFirstTurn = bLogHeaders || getElapsedGameTurns() == 0;
 
@@ -12617,13 +12810,13 @@ void CvGame::LogGameState(bool bLogHeaders) const
 		else
 		{
 			strOutput.Format("%03d", GC.getGame().getElapsedGameTurns());
-			strTemp.Format("%d", iGSConquest);
+			strTemp.Format("%d", kCounts.iGSConquest);
 			strOutput += ", " + strTemp;
-			strTemp.Format("%d", iGSSpaceship);
+			strTemp.Format("%d", kCounts.iGSSpaceship);
 			strOutput += ", " + strTemp;
-			strTemp.Format("%d", iGSUN);
+			strTemp.Format("%d", kCounts.iGSUN);
 			strOutput += ", " + strTemp;
-			strTemp.Format("%d", iGSCulture);
+			strTemp.Format("%d", kCounts.iGSCulture);
 			strOutput += ", " + strTemp;
 		}
 
@@ -12640,19 +12833,19 @@ void CvGame::LogGameState(bool bLogHeaders) const
 		}
 		else
 		{
-			strTemp.Format("%d", iAlly);
+			strTemp.Format("%d", kCounts.iAlly);
 			strOutput += ", " + strTemp;
-			strTemp.Format("%d", iFriend);
+			strTemp.Format("%d", kCounts.iFriend);
 			strOutput += ", " + strTemp;
-			strTemp.Format("%d", iFavorable);
+			strTemp.Format("%d", kCounts.iFavorable);
 			strOutput += ", " + strTemp;
-			strTemp.Format("%d", iNeutral);
+			strTemp.Format("%d", kCounts.iNeutral);
 			strOutput += ", " + strTemp;
-			strTemp.Format("%d", iCompetitor);
+			strTemp.Format("%d", kCounts.iCompetitor);
 			strOutput += ", " + strTemp;
-			strTemp.Format("%d", iEnemy);
+			strTemp.Format("%d", kCounts.iEnemy);
 			strOutput += ", " + strTemp;
-			strTemp.Format("%d", iUnforgivable);
+			strTemp.Format("%d", kCounts.iUnforgivable);
 			strOutput += ", " + strTemp;
 		}
 
@@ -12669,19 +12862,19 @@ void CvGame::LogGameState(bool bLogHeaders) const
 		}
 		else
 		{
-			strTemp.Format("%d", iMajorWar);
+			strTemp.Format("%d", kCounts.iMajorWar);
 			strOutput += ", " + strTemp;
-			strTemp.Format("%d", iMajorHostile);
+			strTemp.Format("%d", kCounts.iMajorHostile);
 			strOutput += ", " + strTemp;
-			strTemp.Format("%d", iMajorDeceptive);
+			strTemp.Format("%d", kCounts.iMajorDeceptive);
 			strOutput += ", " + strTemp;
-			strTemp.Format("%d", iMajorGuarded);
+			strTemp.Format("%d", kCounts.iMajorGuarded);
 			strOutput += ", " + strTemp;
-			strTemp.Format("%d", iMajorAfraid);
+			strTemp.Format("%d", kCounts.iMajorAfraid);
 			strOutput += ", " + strTemp;
-			strTemp.Format("%d", iMajorFriendly);
+			strTemp.Format("%d", kCounts.iMajorFriendly);
 			strOutput += ", " + strTemp;
-			strTemp.Format("%d", iMajorNeutral);
+			strTemp.Format("%d", kCounts.iMajorNeutral);
 			strOutput += ", " + strTemp;
 		}
 
@@ -12695,13 +12888,13 @@ void CvGame::LogGameState(bool bLogHeaders) const
 		}
 		else
 		{
-			strTemp.Format("%d", iMinorIgnore);
+			strTemp.Format("%d", kCounts.iMinorIgnore);
 			strOutput += ", " + strTemp;
-			strTemp.Format("%d", iMinorProtective);
+			strTemp.Format("%d", kCounts.iMinorProtective);
 			strOutput += ", " + strTemp;
-			strTemp.Format("%d", iMinorConquest);
+			strTemp.Format("%d", kCounts.iMinorConquest);
 			strOutput += ", " + strTemp;
-			strTemp.Format("%d", iMinorBully);
+			strTemp.Format("%d", kCounts.iMinorBully);
 			strOutput += ", " + strTemp;
 		}
 
@@ -12726,6 +12919,56 @@ void CvGame::LogGameState(bool bLogHeaders) const
 		}
 
 		pLog->Msg(strOutput);
+	}
+
+	// Mirror WorldStateLog into the SQLite stats database
+	if (MOD_SQLITE_LOGGING)
+	{
+		// Mirror mapStateLog into stats.db. Gated purely behind the SQLite flag (independent of the
+		// CSV logging switches above) and internally guarded, so it is safe to call unconditionally.
+		LogMapPlotsState();
+
+		// Mirror the "units" half of mapStateLog into stats.db: one row per unit per major civ.
+		LogMapUnitsState();
+
+		// Record which era each civ is in this turn (one row per civ).
+		LogCivTurnEra();
+
+		WorldStateLogCounts kCounts;
+		ComputeWorldStateLogCounts(kCounts);
+
+		// Duplicate CSV header names (Neutral, Conquest) are disambiguated in the shared
+		// registration helper so every SQL column name remains unique.
+		RegisterWorldStateLogTable();
+
+		GET_SQLITE_LOGGER().BeginLogRow("WorldStateLog")
+			.bind(kCounts.iGSConquest)
+			.bind(kCounts.iGSSpaceship)
+			.bind(kCounts.iGSUN)
+			.bind(kCounts.iGSCulture)
+			.bind(kCounts.iAlly)
+			.bind(kCounts.iFriend)
+			.bind(kCounts.iFavorable)
+			.bind(kCounts.iNeutral)
+			.bind(kCounts.iCompetitor)
+			.bind(kCounts.iEnemy)
+			.bind(kCounts.iUnforgivable)
+			.bind(kCounts.iMajorWar)
+			.bind(kCounts.iMajorHostile)
+			.bind(kCounts.iMajorDeceptive)
+			.bind(kCounts.iMajorGuarded)
+			.bind(kCounts.iMajorAfraid)
+			.bind(kCounts.iMajorFriendly)
+			.bind(kCounts.iMajorNeutral)
+			.bind(kCounts.iMinorIgnore)
+			.bind(kCounts.iMinorProtective)
+			.bind(kCounts.iMinorConquest)
+			.bind(kCounts.iMinorBully)
+			.bind(GetBasicNeedsMedian())
+			.bind(GetGoldMedian())
+			.bind(GetScienceMedian())
+			.bind(GetCultureMedian())
+			.execute();
 	}
 }
 
@@ -13132,10 +13375,6 @@ void CvGame::SpawnArchaeologySitesHistorically()
 	// Place the hidden writing sites first
 	while (iNumExistingHiddenWritingSites < iTargetNumHiddenWritingSites)
 	{
-		// Out of Great Works of Writing?
-		if (vDeadSeaScrolls.empty())
-			break;
-
 		// Out of valid tiles?
 		if (viProximityAdjustedDigSiteScores.empty() || viProximityAdjustedDigSiteScores.GetWeight(0) == 0)
 			break;
@@ -13293,7 +13532,7 @@ void CvGame::CalculateDigSiteScores(CvWeightedVector<CvPlot*>& viDigSiteScores)
 			iScore = 600;
 
 		// Prioritize artifacts from earlier eras.
-		int iEra = range(static_cast<int>(kArchaeology.m_eEra), 0, 10);
+		int iEra = range(static_cast<int>(kArchaeology.m_eEra), 0, 9);
 		iScore *= 10 - iEra;
 
 		// Add some randomness.
@@ -14281,7 +14520,7 @@ void CvGame::SetExeWantForceResyncPointer(int* pointer)
 bool CvGame::DeleteMPMP()
 {
 	// Logging
-	FILogFile* pLog = LOGFILEMGR.GetLog("MPMPMaker.log", FILogFile::kDontTimeStamp);
+	FILogFile* pLog = LOGFILEMGR.GetLog("ModpackMaker.log", FILogFile::kDontTimeStamp);
 	pLog->Msg("Delete MPMP...");
 
 	// Delete the previous VP_MODPACK folder
@@ -14301,7 +14540,7 @@ bool CvGame::DeleteMPMP()
 bool CvGame::CreateMPMP()
 {
 	// Logging
-	FILogFile* pLog = LOGFILEMGR.GetLog("MPMPMaker.log", FILogFile::kDontTimeStamp);
+	FILogFile* pLog = LOGFILEMGR.GetLog("ModpackMaker.log", FILogFile::kDontTimeStamp);
 	pLog->Msg("Create MPMP Folder...");
 
 	// Create the VP_MODPACK DLC folder
@@ -14328,8 +14567,8 @@ bool CvGame::CreateMPMP()
 	           "  </Description>\n"
 	           "  <UISkin name=\"Expansion2Primary\" set=\"Expansion2\" platform=\"Common\">\n"
 	           "    <GameplaySkin>\n"
-	           "      <Directory>UI</Directory>\n"
 	           "      <Directory>Mods</Directory>\n"
+	           "      <Directory>UI</Directory>\n"
 	           "    </GameplaySkin>\n"
 	           "  </UISkin>\n"
 	           "</Civ5Package>\n";
@@ -14349,22 +14588,8 @@ bool CvGame::CreateMPMP()
 
 	// Create empty gameplay files for the base game and DLC (the Database changes will be handled in the override of the base game's files)
 	// This way we keep the database.log clean.
-	pLog->Msg("Create empty gameplay files from:");
-	pLog->Msg(" - Base Game...");
-	OverrideGamePlayFiles("Assets\\Gameplay");
-	pLog->Msg(" - DLC 01-08 and Deluxe...");
-	OverrideGamePlayFiles("Assets\\DLC\\DLC_01\\Gameplay");
-	OverrideGamePlayFiles("Assets\\DLC\\DLC_02\\Gameplay");
-	OverrideGamePlayFiles("Assets\\DLC\\DLC_03\\Gameplay");
-	OverrideGamePlayFiles("Assets\\DLC\\DLC_04\\Gameplay");
-	OverrideGamePlayFiles("Assets\\DLC\\DLC_05\\Gameplay");
-	OverrideGamePlayFiles("Assets\\DLC\\DLC_06\\Gameplay");
-	OverrideGamePlayFiles("Assets\\DLC\\DLC_07\\Gameplay");
-	OverrideGamePlayFiles("Assets\\DLC\\DLC_Deluxe\\Gameplay");
-	pLog->Msg(" - Expansion 1...");
-	OverrideGamePlayFiles("Assets\\DLC\\Expansion\\Gameplay");
-	pLog->Msg(" - Expension 2...");
-	OverrideGamePlayFiles("Assets\\DLC\\Expansion2\\Gameplay");
+	pLog->Msg("Create empty gameplay files from the Assets folder");
+	OverrideGamePlayFiles("Assets");
 
 	pLog->Msg("Base Folder created...");
 	pLog->Msg("--------------------------------------------------------------------------------");
@@ -14374,7 +14599,7 @@ bool CvGame::CreateMPMP()
 bool CvGame::WriteMPMP(const char* szFileName, const char* szDataBase, bool bInitialize)
 {
 	// Logging
-	FILogFile* pLog = LOGFILEMGR.GetLog("MPMPMaker.log", FILogFile::kDontTimeStamp);
+	FILogFile* pLog = LOGFILEMGR.GetLog("ModpackMaker.log", FILogFile::kDontTimeStamp);
 	pLog->Msg("Write Data in file...");
 
 	// Do not allow NULL entries
@@ -14401,11 +14626,11 @@ bool CvGame::WriteMPMP(const char* szFileName, const char* szDataBase, bool bIni
 	return true;
 }
 
-bool CvGame::CopyModDataToMPMP(const char* szModFolder, const char* szId, const char* szVersion)
+bool CvGame::CopyModDataToMPMP(const char* szModName, const char* szId, const char* szVersion)
 {
 	// Logging
-	FILogFile* pLog = LOGFILEMGR.GetLog("MPMPMaker.log", FILogFile::kDontTimeStamp);
-	pLog->Msg(CvString::format("Copy Mod's Data To MPMP Folder for %s", szModFolder));
+	FILogFile* pLog = LOGFILEMGR.GetLog("ModpackMaker.log", FILogFile::kDontTimeStamp);
+	pLog->Msg(CvString::format("Copy Mod's Data To MPMP Folder for %s", szModName));
 
 	// Get Mods folder
 	DWORD dwType = REG_SZ;
@@ -14427,34 +14652,24 @@ bool CvGame::CopyModDataToMPMP(const char* szModFolder, const char* szId, const 
 
 	pLog->Msg(CvString::format("Path to \"My Documents\" folder: %s", strPath));
 
-	CvString strModsPath = CvString::format("%s\\My Games\\Sid Meier's Civilization 5\\MODS\\%s", strPath, szModFolder);
-	pLog->Msg(CvString::format("Path to the mod's folder: %s", strModsPath.c_str()));
+	CvString strModsPath = CvString::format("%s\\My Games\\Sid Meier's Civilization 5\\MODS", strPath);
+	pLog->Msg(CvString::format("Path to the MODS folder: %s", strModsPath.c_str()));
 
 	// Check mod folder for correct mod, which has the correct id and version in its .modinfo
-	CvString strTemp = GetModFromIdAndVersion(strModsPath, szModFolder, szId, szVersion);
-	if (strTemp.size() == 0)
+	CvString strFolderPath = GetModFromIdAndVersion(strModsPath, szModName, szId, szVersion);
+	if (strFolderPath.size() == 0)
 	{
 		pLog->Msg("Copying mod failed: Folder Not Found");
-		pLog->Msg(strTemp);
-		pLog->Msg("--------------------------------------------------------------------------------");
-		return false;
-	}
-
-	// Check if the folder exists
-	DWORD ftyp = GetFileAttributesA(strModsPath.c_str());
-	if (ftyp == INVALID_FILE_ATTRIBUTES)
-	{
-		pLog->Msg("Mod's path does not exist, aborting...");
 		pLog->Msg("--------------------------------------------------------------------------------");
 		return false;
 	}
 
 	// Create new folder in MP Modspack
-	CvString strDLCPath = CvString::format("Assets\\DLC\\VP_MODPACK\\Mods\\%s", szModFolder);
+	CvString strDLCPath = CvString::format("Assets\\DLC\\VP_MODPACK\\Mods\\%s", szModName);
 	CreateDirectory(strDLCPath, NULL);
 
 	// Copy the mod's files into the new folder
-	int iRC = CopyModFiles(strModsPath, strDLCPath, "");
+	int iRC = CopyModFiles(strFolderPath, strDLCPath, "");
 	if (iRC)
 	{
 		pLog->Msg(CvString::format("Copying mod failed with Error %d", iRC));
@@ -14540,6 +14755,9 @@ int CvGame::OverrideGamePlayFiles(const string& refcstrRootDirectory)
 	HANDLE hFile = ::FindFirstFile(strPattern.c_str(), &FileInformation); // Handle to directory
 	if (hFile != INVALID_HANDLE_VALUE)
 	{
+		char szCurrentDir[MAX_PATH];
+		::GetCurrentDirectoryA(MAX_PATH, szCurrentDir);
+
 		do
 		{
 			string cName = FileInformation.cFileName;
@@ -14556,11 +14774,33 @@ int CvGame::OverrideGamePlayFiles(const string& refcstrRootDirectory)
 				}
 				else
 				{
-					// Create an empty file with the same name
-					if (cName.size() >= 4 && (_stricmp(cName.c_str() + cName.size() - 4, ".xml") == 0)) // We want only XML files
+					// Filter strictly for XML targets
+					if (cName.size() >= 4 && (_stricmp(cName.c_str() + cName.size() - 4, ".xml") == 0))
 					{
-						string strNewFilePath = "Assets\\DLC\\VP_MODPACK\\Override\\" + cName;
-						ofstream outFile(strNewFilePath.c_str(), ios::trunc);
+						// Peek inside the file to check for <GameData> tag
+						ifstream inFile(strFilePath.c_str());
+						if (inFile.is_open())
+						{
+							string strLine;
+							bool bIsGameData = false;
+							int iLinesChecked = 0;
+							while (getline(inFile, strLine) && iLinesChecked < 50)
+							{
+								if (strLine.find("<GameData>") != string::npos)
+								{
+									bIsGameData = true;
+									break;
+								}
+								iLinesChecked++;
+							}
+							inFile.close();
+
+							if (bIsGameData)
+							{
+								string strNewFilePath = string("\\\\?\\") + szCurrentDir + "\\Assets\\DLC\\VP_MODPACK\\Override\\" + cName;
+								ofstream outFile(strNewFilePath.c_str(), ios::trunc);
+							}
+						}
 					}
 				}
 			}
@@ -14589,7 +14829,7 @@ int CvGame::CopyModFiles(const string& strModDirectory, const string& strDLCDire
 		// Only log the start statement on the very first top-level call
 		if (strRootModSource.empty())
 		{
-			FILogFile* pLog = LOGFILEMGR.GetLog("MPMPMaker.log", FILogFile::kDontTimeStamp);
+			FILogFile* pLog = LOGFILEMGR.GetLog("ModpackMaker.log", FILogFile::kDontTimeStamp);
 			pLog->Msg("Beginning Mod File Copy...");
 		}
 
@@ -14609,7 +14849,7 @@ int CvGame::CopyModFiles(const string& strModDirectory, const string& strDLCDire
 					// Safely create the matching subdirectory structure in the DLC folder layout
 					::CreateDirectoryA(strNewFilePath.c_str(), NULL);
 
-					// Recurse deeper, passing down the root source tracker
+					// Recurse deeper, passing down the dynamically computed folder destination string
 					iRC = CopyModFiles(strFilePath, strDLCDirectory, strBaseSource);
 					if (iRC != 0)
 					{
@@ -14654,7 +14894,7 @@ int CvGame::CopyModFiles(const string& strModDirectory, const string& strDLCDire
 bool CvGame::AddUIAddinToMPMP(const char* szUIFileName, const char* szAddinFileName)
 {
 	// Logging
-	FILogFile* pLog = LOGFILEMGR.GetLog("MPMPMaker.log", FILogFile::kDontTimeStamp);
+	FILogFile* pLog = LOGFILEMGR.GetLog("ModpackMaker.log", FILogFile::kDontTimeStamp);
 	pLog->Msg("Add UIAddin...");
 
 	// Do not allow NULL entries
@@ -14676,7 +14916,7 @@ bool CvGame::AddUIAddinToMPMP(const char* szUIFileName, const char* szAddinFileN
 		return false;
 	}
 
-	CvString strInclude = CvString::format("ContextPtr:LoadNewContext(\"%s\")", szAddinFileName);
+	CvString strInclude = CvString::format("g_uiAddins[#g_uiAddins + 1] = \"%s\";", szAddinFileName);
 
 	// Check if the LoadNewContext line is already included in the file
 	ifstream checkFile(strUIfilePath.c_str());
@@ -14710,59 +14950,71 @@ bool CvGame::AddUIAddinToMPMP(const char* szUIFileName, const char* szAddinFileN
 	return true;
 }
 
-CvString CvGame::GetModFromIdAndVersion(const string& refcstrRootDirectory, const string& modName, const string& id, const string& version)
+CvString CvGame::GetModFromIdAndVersion(const string& refcstrModsRootDirectory, const string& modName, const string& id, const string& version)
 {
-	FILogFile* pLog = LOGFILEMGR.GetLog("MPMPMaker.log", FILogFile::kDontTimeStamp);
-	string strPattern = refcstrRootDirectory + "\\*.*";
-	WIN32_FIND_DATA FileInformation; // File information
-	HANDLE hFile = ::FindFirstFile(strPattern.c_str(), &FileInformation); // Handle to directory
-	if (hFile != INVALID_HANDLE_VALUE)
+	FILogFile* pLog = LOGFILEMGR.GetLog("ModpackMaker.log", FILogFile::kDontTimeStamp);
+	
+	string strPattern = refcstrModsRootDirectory + "\\*.*";
+	WIN32_FIND_DATA FolderInformation;
+	HANDLE hFolderFile = ::FindFirstFile(strPattern.c_str(), &FolderInformation);
+	
+	if (hFolderFile != INVALID_HANDLE_VALUE)
 	{
+		tr1::regex modTagRegex("<Mod\\s+([^>]+)>", tr1::regex_constants::icase);
 		tr1::regex idRegex("id\\s*=\\s*[\"']([^\"']+)[\"']", tr1::regex_constants::icase);
 		tr1::regex verRegex("version\\s*=\\s*[\"']([^\"']+)[\"']", tr1::regex_constants::icase);
+		
 		do
 		{
-			string cName = FileInformation.cFileName;
-			if (cName != "." && cName != "..")
+			string cFolderName = FolderInformation.cFileName;
+			if (cFolderName != "." && cFolderName != "..")
 			{
-				string strFolderPath = refcstrRootDirectory + "\\" + cName;
-				if (FileInformation.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+				string strCurrentModFolder = refcstrModsRootDirectory + "\\" + cFolderName;
+				
+				if (FolderInformation.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
 				{
-					// Folder found, check .modinfo
-					string strModinfoPattern = strFolderPath + "\\*.modinfo";
-					WIN32_FIND_DATA ModinfoFileInformation; // Modinfo file information
-					HANDLE hModInfoFile = ::FindFirstFile(strModinfoPattern.c_str(), &ModinfoFileInformation); // Handle to modinfo file
+					string strModinfoPattern = strCurrentModFolder + "\\*.modinfo";
+					WIN32_FIND_DATA ModinfoFileInformation;
+					HANDLE hModInfoFile = ::FindFirstFile(strModinfoPattern.c_str(), &ModinfoFileInformation);
+					
 					if (hModInfoFile != INVALID_HANDLE_VALUE)
 					{
-						string strFilePath = strFolderPath + "\\" + ModinfoFileInformation.cFileName;
+						string strFilePath = strCurrentModFolder + "\\" + ModinfoFileInformation.cFileName;
 						ifstream file(strFilePath.c_str());
-
+						
 						string fileContent((istreambuf_iterator<char>(file)), istreambuf_iterator<char>());
-
-						tr1::smatch idMatch;
-						tr1::smatch verMatch;
-
-						// Run regex over the entire header chunk globally, ignoring manual line tracking entirely
-						if (tr1::regex_search(fileContent, idMatch, idRegex) && tr1::regex_search(fileContent, verMatch, verRegex))
+						
+						tr1::smatch modTagMatch;
+						
+						// Isolate the main opening <Mod> attribute string segment
+						if (tr1::regex_search(fileContent, modTagMatch, modTagRegex))
 						{
-							string strModId = idMatch[1].str();
-							string strModVersion = verMatch[1].str();
-
-							if (_stricmp(id.c_str(), strModId.c_str()) == 0 && _stricmp(version.c_str(), strModVersion.c_str()) == 0)
+							string modAttributes = modTagMatch[1].str();
+							
+							tr1::smatch idMatch;
+							tr1::smatch verMatch;
+							
+							// Scan strictly inside the isolated attribute block
+							if (tr1::regex_search(modAttributes, idMatch, idRegex) && tr1::regex_search(modAttributes, verMatch, verRegex))
 							{
-								::FindClose(hModInfoFile);
-								::FindClose(hFile);
-								return strFolderPath; // Safe match found!
+								string strModId = idMatch[1].str();
+								string strModVersion = verMatch[1].str();
+								
+								if (_stricmp(id.c_str(), strModId.c_str()) == 0 && _stricmp(version.c_str(), strModVersion.c_str()) == 0)
+								{
+									::FindClose(hModInfoFile);
+									::FindClose(hFolderFile);
+									return strCurrentModFolder;
+								}
 							}
 						}
 						::FindClose(hModInfoFile);
 					}
 				}
 			}
-		} while (::FindNextFile(hFile, &FileInformation) == TRUE);
+		} while (::FindNextFile(hFolderFile, &FolderInformation) == TRUE);
 
-		// Close handle
-		::FindClose(hFile);
+		::FindClose(hFolderFile);
 	}
 
 	pLog->Msg(CvString::format("Modinfo not found for %s (v %s). This folder will not copy!", modName.c_str(), version.c_str()));
