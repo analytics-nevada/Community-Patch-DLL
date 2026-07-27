@@ -800,9 +800,11 @@ int CvSiteEvaluatorForSettler::PlotFoundValue(CvPlot* pPlot, const CvPlayer* pPl
 		{
 			eNeighbor = pClosestCity->getOwner();
 		}
-		else if (pPlayer->GetNumCitiesFounded() < 4) //early game
+		else if (pPlayer->GetNumCitiesFounded() < 4 && pPlayer->getCapitalCity() != NULL) //early game
 		{
 			//if we're still inside our sphere of influence, see if we can make a strategic claim to territory
+			//note: a player can be alive with founding history but no current cities (lost capital while
+			//keeping units) - getCapitalCity() is NULL then and dereferencing it crashes (turn-46 MP AV).
 			DirectionTypes eDirectionFromCapital = directionXY(pPlayer->getCapitalCity()->plot(), pPlot);
 
 			//go two steps outward
