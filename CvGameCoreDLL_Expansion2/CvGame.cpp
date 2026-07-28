@@ -626,90 +626,6 @@ void CvGame::InitPlayers()
 		kTeam.init(eTeam);
 	}
 
-	// MP_TSL (GAMEOPTION_FILL_ALL_MAJOR_SLOTS): the multiplayer lobby is
-	// capped at 12 slots by the EXE's matchmaking layer, but slots beyond
-	// the lobby already run as AI in every MP game - that is exactly how
-	// city-state slots work (SS_COMPUTER, NetID -1, no lobby presence,
-	// simulated deterministically on every client). When this synced game
-	// option is enabled, convert every unused major slot to an AI with a
-	// deterministic civ pick so full-roster games are possible. This runs
-	// identically on all clients inside game init, after the EXE's lobby
-	// handshake has finished rewriting PreGame - the only point where slot
-	// changes reliably stick (Lua-side attempts are all discarded earlier).
-	int iFillAllMajors = 0;
-	CvPreGame::GetGameOption("GAMEOPTION_FILL_ALL_MAJOR_SLOTS", iFillAllMajors);
-	if (iFillAllMajors == 1)
-	{
-		// Civs already spoken for (lobby picks or PreGame residue on slots
-		// we will not touch).
-		vector<CivilizationTypes> vUsedCivs;
-		for (int iI = 0; iI < MAX_MAJOR_CIVS; iI++)
-		{
-			const PlayerTypes eLoopPlayer = static_cast<PlayerTypes>(iI);
-			SlotStatus eStatus = CvPreGame::slotStatus(eLoopPlayer);
-			if (eStatus == SS_TAKEN || eStatus == SS_COMPUTER || eStatus == SS_OBSERVER)
-				vUsedCivs.push_back(CvPreGame::civilization(eLoopPlayer));
-		}
-
-		int iFilled = 0;
-		for (int iI = 0; iI < MAX_MAJOR_CIVS; iI++)
-		{
-			const PlayerTypes eLoopPlayer = static_cast<PlayerTypes>(iI);
-			SlotStatus eStatus = CvPreGame::slotStatus(eLoopPlayer);
-			if (eStatus == SS_TAKEN || eStatus == SS_COMPUTER || eStatus == SS_OBSERVER)
-				continue;
-
-			// Deterministic pick: first AI-playable civ (skip barbarian and
-			// minor placeholders) not already in use, in database order.
-			CivilizationTypes eAssignedCiv = NO_CIVILIZATION;
-			LeaderHeadTypes eAssignedLeader = NO_LEADER;
-			for (int iCiv = 0; iCiv < GC.getNumCivilizationInfos() && eAssignedCiv == NO_CIVILIZATION; iCiv++)
-			{
-				CivilizationTypes eTestCiv = static_cast<CivilizationTypes>(iCiv);
-				if (eTestCiv == eBarbCiv || eTestCiv == eMinorCiv)
-					continue;
-
-				CvCivilizationInfo* pCivInfo = GC.getCivilizationInfo(eTestCiv);
-				if (pCivInfo == NULL || !pCivInfo->isAIPlayable())
-					continue;
-
-				if (std::find(vUsedCivs.begin(), vUsedCivs.end(), eTestCiv) != vUsedCivs.end())
-					continue;
-
-				for (int iLeader = 0; iLeader < GC.getNumLeaderHeadInfos(); iLeader++)
-				{
-					if (pCivInfo->isLeaders(iLeader))
-					{
-						eAssignedCiv = eTestCiv;
-						eAssignedLeader = static_cast<LeaderHeadTypes>(iLeader);
-						break;
-					}
-				}
-			}
-
-			// No unused civ left: leave the slot alone.
-			if (eAssignedCiv == NO_CIVILIZATION)
-				continue;
-
-			CvPreGame::setSlotStatus(eLoopPlayer, SS_COMPUTER);
-			CvPreGame::setNetID(eLoopPlayer, -1);
-			CvPreGame::setTeamType(eLoopPlayer, static_cast<TeamTypes>(iI));
-			CvPreGame::setMinorCiv(eLoopPlayer, false);
-			CvPreGame::setHandicap(eLoopPlayer, eAIHandicap);
-			CvPreGame::setCivilization(eLoopPlayer, eAssignedCiv);
-			CvPreGame::setLeaderHead(eLoopPlayer, eAssignedLeader);
-			CvPreGame::setNickname(eLoopPlayer, "");
-			CvPreGame::setPlayerColor(eLoopPlayer, NO_PLAYERCOLOR); // resolved below with dedup
-			vUsedCivs.push_back(eAssignedCiv);
-			iFilled++;
-		}
-
-		if (iFilled > 0)
-		{
-			CUSTOMLOG("FILL_ALL_MAJOR_SLOTS: converted %d unused major slots to AI", iFilled);
-		}
-	}
-
 	// Determine player colors and don't allow duplicates.
 	PlayerColorTypes aePlayerColors[MAX_MAJOR_CIVS];
 	vector<PlayerColorTypes> vColorsAlreadyUsed;
@@ -926,6 +842,126 @@ void CvGame::InitPlayers()
 //
 void CvGame::setInitialItems(CvGameInitialItemsOverrides& kInitialItemOverrides)
 {
+	// MP_TSL (GAMEOPTION_FILL_ALL_MAJOR_SLOTS): fill every unused major
+	// slot with an AI. This point is AFTER the EXE's lobby handshake and
+	// after map load (an earlier attempt in InitPlayers was overwritten by
+	// the roster - learned empirically), and it keys on isEverAlive()
+	// rather than slot status, so no PreGame ambiguity matters. Uses the
+	// autoplay-observer recipe for late player creation (setSlotStatus +
+	// CvPlayer::init + updateTeamStatus), replicates initDiplomacy for the
+	// new team (meet self, barbarian war), and pulls true start locations
+	// from the GiantEarthTSL_MajorStartPosition table when the map mod is
+	// present; initFreeState/assignStartingPlots/initFreeUnits below then
+	// treat the new players like anyone else. Deterministic on all
+	// clients: ever-alive state + database-order civ picks.
+	{
+		int iFillAllMajors = 0;
+		CvPreGame::GetGameOption("GAMEOPTION_FILL_ALL_MAJOR_SLOTS", iFillAllMajors);
+		if (iFillAllMajors == 1)
+		{
+			CivilizationTypes eBarbCiv = (CivilizationTypes)GD_INT_GET(BARBARIAN_CIVILIZATION);
+			CivilizationTypes eMinorCivType = (CivilizationTypes)GD_INT_GET(MINOR_CIVILIZATION);
+			HandicapTypes eAIHandicap = (HandicapTypes)GD_INT_GET(AI_HANDICAP);
+
+			vector<CivilizationTypes> vUsedCivs;
+			for (int iI = 0; iI < MAX_MAJOR_CIVS; iI++)
+			{
+				if (GET_PLAYER((PlayerTypes)iI).isEverAlive())
+					vUsedCivs.push_back(GET_PLAYER((PlayerTypes)iI).getCivilizationType());
+			}
+
+			int iFilled = 0;
+			for (int iI = 0; iI < MAX_MAJOR_CIVS; iI++)
+			{
+				const PlayerTypes eLoopPlayer = static_cast<PlayerTypes>(iI);
+				if (GET_PLAYER(eLoopPlayer).isEverAlive())
+					continue;
+
+				CivilizationTypes eAssignedCiv = NO_CIVILIZATION;
+				LeaderHeadTypes eAssignedLeader = NO_LEADER;
+				for (int iCiv = 0; iCiv < GC.getNumCivilizationInfos() && eAssignedCiv == NO_CIVILIZATION; iCiv++)
+				{
+					CivilizationTypes eTestCiv = static_cast<CivilizationTypes>(iCiv);
+					if (eTestCiv == eBarbCiv || eTestCiv == eMinorCivType)
+						continue;
+
+					CvCivilizationInfo* pCivInfo = GC.getCivilizationInfo(eTestCiv);
+					if (pCivInfo == NULL || !pCivInfo->isAIPlayable())
+						continue;
+
+					if (std::find(vUsedCivs.begin(), vUsedCivs.end(), eTestCiv) != vUsedCivs.end())
+						continue;
+
+					for (int iLeader = 0; iLeader < GC.getNumLeaderHeadInfos(); iLeader++)
+					{
+						if (pCivInfo->isLeaders(iLeader))
+						{
+							eAssignedCiv = eTestCiv;
+							eAssignedLeader = static_cast<LeaderHeadTypes>(iLeader);
+							break;
+						}
+					}
+				}
+
+				if (eAssignedCiv == NO_CIVILIZATION)
+					continue;
+
+				CvPreGame::setSlotStatus(eLoopPlayer, SS_COMPUTER);
+				CvPreGame::setNetID(eLoopPlayer, -1);
+				CvPreGame::setTeamType(eLoopPlayer, static_cast<TeamTypes>(iI));
+				CvPreGame::setMinorCiv(eLoopPlayer, false);
+				CvPreGame::setHandicap(eLoopPlayer, eAIHandicap);
+				CvPreGame::setCivilization(eLoopPlayer, eAssignedCiv);
+				CvPreGame::setLeaderHead(eLoopPlayer, eAssignedLeader);
+				CvPreGame::setNickname(eLoopPlayer, "");
+
+				CvPlayerAI& kNewPlayer = GET_PLAYER(eLoopPlayer);
+				kNewPlayer.init(eLoopPlayer);
+				GET_TEAM(kNewPlayer.getTeam()).updateTeamStatus();
+				GET_TEAM(kNewPlayer.getTeam()).meet(kNewPlayer.getTeam(), false);
+				GET_TEAM(BARBARIAN_TEAM).declareWar(kNewPlayer.getTeam(), false, GET_TEAM(BARBARIAN_TEAM).getLeaderID());
+
+				// True start location from the Giant Earth TSL mod, if present.
+				CvCivilizationInfo* pAssignedInfo = GC.getCivilizationInfo(eAssignedCiv);
+				Database::Connection* db = GC.GetGameDatabase();
+				if (db != NULL && pAssignedInfo != NULL)
+				{
+					Database::Results kQ;
+					if (db->Execute(kQ, "SELECT X, Y FROM GiantEarthTSL_MajorStartPosition WHERE Type = ?"))
+					{
+						kQ.Bind(1, pAssignedInfo->GetType());
+						if (kQ.Step())
+						{
+							CvPlot* pTSL = GC.getMap().plot(kQ.GetInt(0), kQ.GetInt(1));
+							if (pTSL != NULL && !pTSL->isWater())
+							{
+								bool bTaken = false;
+								for (int iJ = 0; iJ < MAX_CIV_PLAYERS; iJ++)
+								{
+									if (iJ != iI && GET_PLAYER((PlayerTypes)iJ).isEverAlive() && GET_PLAYER((PlayerTypes)iJ).getStartingPlot() == pTSL)
+									{
+										bTaken = true;
+										break;
+									}
+								}
+								if (!bTaken)
+									kNewPlayer.setStartingPlot(pTSL);
+							}
+						}
+					}
+				}
+
+				vUsedCivs.push_back(eAssignedCiv);
+				iFilled++;
+			}
+
+			if (iFilled > 0)
+			{
+				CUSTOMLOG("FILL_ALL_MAJOR_SLOTS: late-filled %d major slots with AI in setInitialItems", iFilled);
+			}
+		}
+	}
+
 	initFreeState(kInitialItemOverrides);
 
 	if(CvPreGame::isWBMapScript())
