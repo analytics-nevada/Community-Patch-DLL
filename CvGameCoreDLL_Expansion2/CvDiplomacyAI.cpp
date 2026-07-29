@@ -26091,7 +26091,15 @@ void CvDiplomacyAI::DoUpdatePeaceTreatyWillingness(bool bMyTurn)
 			switch (GetWarState(ePlayer))
 			{
 			case NO_WAR_STATE_TYPE:
-				UNREACHABLE(); // Being here would indicate we aren't at war with this player.
+				// Reachable via nested war declarations: a coop war triggered
+				// inside CvTeam::DoDeclareWar runs DoReevaluatePlayers for the
+				// joining ally while the outer declaration's war-state caches
+				// are not yet updated, so a pair can read as at-war-but-
+				// stateless (observed turn 107, 43-civ MP, ud2 trap; stack:
+				// declareWar -> DoStartCoopWar -> declareWar ->
+				// DoReevaluatePlayers). Skip the war-state adjustment for
+				// this pass; the cache settles by the next evaluation.
+				break;
 			case WAR_STATE_NEARLY_WON:
 				iPeaceScore -= !bFailedAnyVassalagePrereq ? 0 : 10 * iOurMultiplier;
 				break;
